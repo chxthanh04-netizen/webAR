@@ -111,7 +111,7 @@
   </div>
 
   <!-- Gesture hint & Reset button -->
-  <div id="gesture-hint">🤏 Pinch: zoom &nbsp;|&nbsp; 👆 Vuốt mọi hướng: xoay 360°</div>
+  <div id="gesture-hint">🤏 Pinch+Twist: zoom & xoay Z &nbsp;|&nbsp; 👆 Vuốt: xoay X/Y</div>
   <button id="reset-btn">↺ Reset</button>
 
   <!-- AR Scene - luôn có trong DOM, splash chỉ phủ lên trên -->
@@ -181,40 +181,56 @@
     // ── GESTURE CONTROLS ──────────────────────────────────────────
     var entity = document.getElementById('dragon-entity');
 
-    // Trạng thái hiện tại
     var currentScale = 0.1;
-    var currentRotX  = 0;   // ngửa / cúi
-    var currentRotY  = 0;   // xoay trái / phải
+    var currentRotX  = 0;   // vuốt dọc  → ngửa / cúi
+    var currentRotY  = 0;   // vuốt ngang → trái / phải
+    var currentRotZ  = 0;   // twist 2 ngón → xoay tròn
     var SCALE_MIN    = 0.02;
     var SCALE_MAX    = 1.0;
-    var SENSITIVITY  = 0.4; // độ nhạy xoay
+    var SENSITIVITY  = 0.4;
 
     function applyTransform() {
       entity.setAttribute('scale',    currentScale + ' ' + currentScale + ' ' + currentScale);
-      entity.setAttribute('rotation', currentRotX + ' ' + currentRotY + ' 0');
+      entity.setAttribute('rotation', currentRotX + ' ' + currentRotY + ' ' + currentRotZ);
     }
 
-    // Reset button
+    // Reset
     document.getElementById('reset-btn').addEventListener('click', function() {
       currentScale = 0.1;
-      currentRotX  = 0;
-      currentRotY  = 0;
+      currentRotX = currentRotY = currentRotZ = 0;
       applyTransform();
     });
 
-    // ── TOUCH EVENTS ─────────────────────────────────────────────
-    var lastTouchDist = null;
-    var lastTouchX    = null;
-    var lastTouchY    = null;
+    // ── TOUCH ────────────────────────────────────────────────────
+    var lastTouchDist  = null;
+    var lastTouchAngle = null;   // góc giữa 2 ngón → twist Z
+    var lastTouchX     = null;
+    var lastTouchY     = null;
+
+    // Tính khoảng cách 2 ngón
+    function getTouchDist(t) {
+      var dx = t[0].clientX - t[1].clientX;
+      var dy = t[0].clientY - t[1].clientY;
+      return Math.sqrt(dx*dx + dy*dy);
+    }
+    // Tính góc giữa 2 ngón (radian → độ)
+    function getTouchAngle(t) {
+      return Math.atan2(
+        t[1].clientY - t[0].clientY,
+        t[1].clientX - t[0].clientX
+      ) * (180 / Math.PI);
+    }
 
     document.addEventListener('touchstart', function(e) {
       if (e.touches.length === 2) {
-        lastTouchDist = getTouchDist(e.touches);
+        lastTouchDist  = getTouchDist(e.touches);
+        lastTouchAngle = getTouchAngle(e.touches);
         lastTouchX = lastTouchY = null;
       } else if (e.touches.length === 1) {
-        lastTouchX    = e.touches[0].clientX;
-        lastTouchY    = e.touches[0].clientY;
-        lastTouchDist = null;
+        lastTouchX     = e.touches[0].clientX;
+        lastTouchY     = e.touches[0].clientY;
+        lastTouchDist  = null;
+        lastTouchAngle = null;
       }
     }, { passive: true });
 
@@ -222,41 +238,51 @@
       if (!entity) return;
 
       if (e.touches.length === 2) {
-        // ── PINCH: phóng to / thu nhỏ ──
+        // ── PINCH: zoom ──────────────────────────────────────────
         var dist = getTouchDist(e.touches);
         if (lastTouchDist !== null) {
           var ratio = dist / lastTouchDist;
           currentScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, currentScale * ratio));
-          applyTransform();
         }
         lastTouchDist = dist;
+
+        // ── TWIST: xoay trục Z ───────────────────────────────────
+        var angle = getTouchAngle(e.touches);
+        if (lastTouchAngle !== null) {
+          var dAngle = angle - lastTouchAngle;
+          // Xử lý nhảy góc qua ±180°
+          if (dAngle >  180) dAngle -= 360;
+          if (dAngle < -180) dAngle += 360;
+          currentRotZ -= dAngle;  // dấu trừ để hướng xoay tự nhiên
+        }
+        lastTouchAngle = angle;
+
+        applyTransform();
         lastTouchX = lastTouchY = null;
 
       } else if (e.touches.length === 1) {
-        // ── SWIPE: xoay trục X và Y ──
+        // ── SWIPE 1 ngón: xoay X và Y ────────────────────────────
         var x = e.touches[0].clientX;
         var y = e.touches[0].clientY;
         if (lastTouchX !== null && lastTouchY !== null) {
           var dx = x - lastTouchX;
           var dy = y - lastTouchY;
-          currentRotY += dx * SENSITIVITY;  // vuốt ngang → xoay trái/phải
-          currentRotX -= dy * SENSITIVITY;  // vuốt dọc  → ngửa/cúi
-          // Giới hạn trục X để tránh lật ngược hoàn toàn (tuỳ chọn)
-          // currentRotX = Math.max(-90, Math.min(90, currentRotX));
+          currentRotY += dx * SENSITIVITY;  // ngang → xoay trái/phải ✓
+          currentRotX += dy * SENSITIVITY;  // dọc   → ngửa/cúi ✓ (đã sửa dấu)
           applyTransform();
         }
         lastTouchX    = x;
         lastTouchY    = y;
-        lastTouchDist = null;
+        lastTouchDist = lastTouchAngle = null;
       }
     }, { passive: true });
 
     document.addEventListener('touchend', function(e) {
-      if (e.touches.length < 2) lastTouchDist = null;
+      if (e.touches.length < 2) { lastTouchDist = lastTouchAngle = null; }
       if (e.touches.length < 1) { lastTouchX = lastTouchY = null; }
     }, { passive: true });
 
-    // ── MOUSE (desktop): kéo chuột → xoay X+Y, scroll → zoom ───
+    // ── MOUSE (desktop) ──────────────────────────────────────────
     var mouseDown  = false;
     var lastMouseX = null;
     var lastMouseY = null;
@@ -269,26 +295,18 @@
     document.addEventListener('mouseup', function() { mouseDown = false; });
     document.addEventListener('mousemove', function(e) {
       if (!mouseDown || !entity) return;
-      var dx = e.clientX - lastMouseX;
-      var dy = e.clientY - lastMouseY;
-      currentRotY += dx * SENSITIVITY;
-      currentRotX -= dy * SENSITIVITY;
+      currentRotY += (e.clientX - lastMouseX) * SENSITIVITY;
+      currentRotX += (e.clientY - lastMouseY) * SENSITIVITY;
       applyTransform();
       lastMouseX = e.clientX;
       lastMouseY = e.clientY;
     });
     document.addEventListener('wheel', function(e) {
       if (!entity) return;
-      var delta = e.deltaY > 0 ? 0.9 : 1.1;
-      currentScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, currentScale * delta));
+      currentScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN,
+        currentScale * (e.deltaY > 0 ? 0.9 : 1.1)));
       applyTransform();
     }, { passive: true });
-
-    function getTouchDist(touches) {
-      var dx = touches[0].clientX - touches[1].clientX;
-      var dy = touches[0].clientY - touches[1].clientY;
-      return Math.sqrt(dx * dx + dy * dy);
-    }
   </script>
 </body>
 </html>
