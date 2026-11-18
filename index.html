@@ -76,6 +76,22 @@
     }
     .status-searching { background: rgba(255,193,7,0.3); color: #ffc107; border: 1px solid rgba(255,193,7,0.5); }
     .status-found { background: rgba(76,175,80,0.3); color: #4caf50; border: 1px solid rgba(76,175,80,0.5); }
+
+    /* Gesture controls UI */
+    #gesture-hint {
+      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+      z-index: 9998; display: none;
+      background: rgba(0,0,0,0.6); border-radius: 20px;
+      padding: 8px 16px; font-size: 12px; color: #fff;
+      white-space: nowrap; pointer-events: none;
+    }
+    #reset-btn {
+      position: fixed; top: 16px; right: 16px; z-index: 9998;
+      display: none;
+      background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25);
+      color: #fff; border-radius: 50px; padding: 8px 16px;
+      font-size: 13px; cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -93,6 +109,10 @@
     <div class="hint">📌 Hướng camera vào marker Hiro</div>
     <div class="status status-searching" id="marker-status">🔍 Đang tìm marker...</div>
   </div>
+
+  <!-- Gesture hint & Reset button -->
+  <div id="gesture-hint">🤏 Pinch: zoom &nbsp;|&nbsp; 👆 Vuốt: xoay</div>
+  <button id="reset-btn">↺ Reset</button>
 
   <!-- AR Scene - luôn có trong DOM, splash chỉ phủ lên trên -->
   <a-scene
@@ -140,6 +160,8 @@
     document.getElementById('start-btn').addEventListener('click', function() {
       document.getElementById('splash').style.display = 'none';
       document.getElementById('hud').style.display = 'block';
+      document.getElementById('gesture-hint').style.display = 'block';
+      document.getElementById('reset-btn').style.display = 'block';
 
       // Marker events
       var marker = document.getElementById('hiro-marker');
@@ -155,6 +177,102 @@
         });
       }
     });
+
+    // ── GESTURE CONTROLS ──────────────────────────────────────────
+    var entity = document.getElementById('dragon-entity');
+
+    // Trạng thái hiện tại
+    var currentScale = 0.1;        // khớp với scale ban đầu trong HTML
+    var currentRotY  = 0;          // độ xoay trục Y (độ)
+    var SCALE_MIN    = 0.02;
+    var SCALE_MAX    = 1.0;
+
+    function applyTransform() {
+      entity.setAttribute('scale', currentScale + ' ' + currentScale + ' ' + currentScale);
+      entity.setAttribute('rotation', '0 ' + currentRotY + ' 0');
+    }
+
+    // Reset button
+    document.getElementById('reset-btn').addEventListener('click', function() {
+      currentScale = 0.1;
+      currentRotY  = 0;
+      applyTransform();
+    });
+
+    // ── TOUCH EVENTS ─────────────────────────────────────────────
+    var lastTouchDist  = null;   // khoảng cách 2 ngón (pinch)
+    var lastTouchX     = null;   // vị trí X ngón 1 (xoay)
+
+    document.addEventListener('touchstart', function(e) {
+      if (e.touches.length === 2) {
+        lastTouchDist = getTouchDist(e.touches);
+        lastTouchX    = null;
+      } else if (e.touches.length === 1) {
+        lastTouchX    = e.touches[0].clientX;
+        lastTouchDist = null;
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function(e) {
+      if (!entity) return;
+
+      if (e.touches.length === 2) {
+        // ── PINCH: phóng to / thu nhỏ ──
+        var dist = getTouchDist(e.touches);
+        if (lastTouchDist !== null) {
+          var ratio = dist / lastTouchDist;
+          currentScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, currentScale * ratio));
+          applyTransform();
+        }
+        lastTouchDist = dist;
+        lastTouchX    = null;
+
+      } else if (e.touches.length === 1) {
+        // ── SWIPE: xoay trục Y ──
+        var x = e.touches[0].clientX;
+        if (lastTouchX !== null) {
+          var dx = x - lastTouchX;
+          currentRotY += dx * 0.5;   // hệ số nhạy, tăng lên nếu muốn xoay nhanh hơn
+          applyTransform();
+        }
+        lastTouchX    = x;
+        lastTouchDist = null;
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchend', function(e) {
+      if (e.touches.length < 2) lastTouchDist = null;
+      if (e.touches.length < 1) lastTouchX    = null;
+    }, { passive: true });
+
+    // ── MOUSE (desktop): kéo chuột để xoay, scroll để zoom ──────
+    var mouseDown = false;
+    var lastMouseX = null;
+
+    document.addEventListener('mousedown', function(e) {
+      mouseDown  = true;
+      lastMouseX = e.clientX;
+    });
+    document.addEventListener('mouseup',   function() { mouseDown = false; });
+    document.addEventListener('mousemove', function(e) {
+      if (!mouseDown || !entity) return;
+      var dx = e.clientX - lastMouseX;
+      currentRotY += dx * 0.5;
+      applyTransform();
+      lastMouseX = e.clientX;
+    });
+    document.addEventListener('wheel', function(e) {
+      if (!entity) return;
+      var delta = e.deltaY > 0 ? 0.9 : 1.1;
+      currentScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, currentScale * delta));
+      applyTransform();
+    }, { passive: true });
+
+    function getTouchDist(touches) {
+      var dx = touches[0].clientX - touches[1].clientX;
+      var dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
   </script>
 </body>
 </html>
