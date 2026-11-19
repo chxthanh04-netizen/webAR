@@ -106,7 +106,7 @@
 
   <!-- HUD -->
   <div id="hud">
-    <div class="hint">📌 Hướng camera vào marker Hiro</div>
+    <div class="hint">📌 Hướng camera vào marker Chánh Điện</div>
     <div class="status status-searching" id="marker-status">🔍 Đang tìm marker...</div>
   </div>
 
@@ -131,7 +131,8 @@
     <a-light type="ambient" color="#ffffff" intensity="0.9"></a-light>
     <a-light type="directional" color="#ffffff" intensity="0.8" position="1 3 2"></a-light>
 
-    <a-marker preset="hiro" emitevents="true"
+    <a-marker type="pattern" url="marker/marker_chua.patt"
+              emitevents="true"
               smooth="true" smoothCount="10"
               smoothTolerance="0.01" smoothThreshold="5"
               id="hiro-marker">
@@ -182,22 +183,43 @@
     var entity = document.getElementById('dragon-entity');
 
     var currentScale = 0.1;
-    var currentRotX  = 0;   // vuốt dọc  → ngửa / cúi
-    var currentRotY  = 0;   // vuốt ngang → trái / phải
-    var currentRotZ  = 0;   // twist 2 ngón → xoay tròn
     var SCALE_MIN    = 0.02;
     var SCALE_MAX    = 1.0;
-    var SENSITIVITY  = 0.4;
+    var SENSITIVITY  = 0.5;
+
+    // Dùng Quaternion để tránh gimbal lock — xoay luôn đúng hướng ngón tay
+    var rotQuat = new THREE.Quaternion();
 
     function applyTransform() {
-      entity.setAttribute('scale',    currentScale + ' ' + currentScale + ' ' + currentScale);
-      entity.setAttribute('rotation', currentRotX + ' ' + currentRotY + ' ' + currentRotZ);
+      entity.setAttribute('scale', currentScale + ' ' + currentScale + ' ' + currentScale);
+      // Chuyển quaternion → euler để gán cho A-Frame
+      var euler = new THREE.Euler().setFromQuaternion(rotQuat, 'YXZ');
+      entity.setAttribute('rotation', {
+        x: THREE.MathUtils.radToDeg(euler.x),
+        y: THREE.MathUtils.radToDeg(euler.y),
+        z: THREE.MathUtils.radToDeg(euler.z)
+      });
+    }
+
+    // Xoay thêm theo trục WORLD (không bị lệch dù đã xoay trước đó)
+    function rotateByDelta(dx, dy) {
+      var angleY = dx * SENSITIVITY * (Math.PI / 180); // ngang → trục Y thế giới
+      var angleX = dy * SENSITIVITY * (Math.PI / 180); // dọc  → trục X thế giới
+      var qY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), angleY);
+      var qX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), angleX);
+      rotQuat.premultiply(qY).premultiply(qX);
+    }
+
+    function rotateByTwist(dAngleDeg) {
+      var angleZ = dAngleDeg * (Math.PI / 180);
+      var qZ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), angleZ);
+      rotQuat.premultiply(qZ);
     }
 
     // Reset
     document.getElementById('reset-btn').addEventListener('click', function() {
       currentScale = 0.1;
-      currentRotX = currentRotY = currentRotZ = 0;
+      rotQuat.set(0, 0, 0, 1); // identity
       applyTransform();
     });
 
@@ -246,14 +268,13 @@
         }
         lastTouchDist = dist;
 
-        // ── TWIST: xoay trục Z ───────────────────────────────────
+        // ── TWIST: xoay trục Z (dùng quaternion) ─────────────────
         var angle = getTouchAngle(e.touches);
         if (lastTouchAngle !== null) {
           var dAngle = angle - lastTouchAngle;
-          // Xử lý nhảy góc qua ±180°
           if (dAngle >  180) dAngle -= 360;
           if (dAngle < -180) dAngle += 360;
-          currentRotZ -= dAngle;  // dấu trừ để hướng xoay tự nhiên
+          rotateByTwist(-dAngle);
         }
         lastTouchAngle = angle;
 
@@ -261,14 +282,13 @@
         lastTouchX = lastTouchY = null;
 
       } else if (e.touches.length === 1) {
-        // ── SWIPE 1 ngón: xoay X và Y ────────────────────────────
+        // ── SWIPE 1 ngón: xoay X và Y (dùng quaternion) ──────────
         var x = e.touches[0].clientX;
         var y = e.touches[0].clientY;
         if (lastTouchX !== null && lastTouchY !== null) {
           var dx = x - lastTouchX;
           var dy = y - lastTouchY;
-          currentRotY += dx * SENSITIVITY;  // ngang → xoay trái/phải ✓
-          currentRotX += dy * SENSITIVITY;  // dọc   → ngửa/cúi ✓ (đã sửa dấu)
+          rotateByDelta(dx, dy);
           applyTransform();
         }
         lastTouchX    = x;
@@ -295,8 +315,7 @@
     document.addEventListener('mouseup', function() { mouseDown = false; });
     document.addEventListener('mousemove', function(e) {
       if (!mouseDown || !entity) return;
-      currentRotY += (e.clientX - lastMouseX) * SENSITIVITY;
-      currentRotX += (e.clientY - lastMouseY) * SENSITIVITY;
+      rotateByDelta(e.clientX - lastMouseX, e.clientY - lastMouseY);
       applyTransform();
       lastMouseX = e.clientX;
       lastMouseY = e.clientY;
