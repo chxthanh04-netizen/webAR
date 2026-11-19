@@ -11,35 +11,69 @@
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
 
   <script>
-    // Component tự động căn giữa và đặt chân mô hình lên đúng mặt phẳng marker
-    AFRAME.registerComponent('auto-center', {
+    // Component: khi model tải xong thì
+    //   1) đo kích thước thật của model (đúng hệ tọa độ, không phụ thuộc marker đang hiện hay không)
+    //   2) co/giãn để cạnh lớn nhất = "size" (đơn vị: 1 = bằng chiều rộng marker)
+    //   3) dời TÂM của model về gốc (0,0,0) => xoay/zoom luôn quanh tâm, không bị văng ra khỏi marker
+    // Xong thì báo lại chiều cao (nửa) để trang nâng mô hình lên cho chân chạm mặt marker.
+    AFRAME.registerComponent('auto-fit', {
+      schema: { size: { type: 'number', default: 1 } },
+
       init: function () {
-        this.el.addEventListener('model-loaded', () => {
-          const obj = this.el.getObject3D('mesh');
-          if (!obj) return;
+        this.el.addEventListener('model-loaded', this.fit.bind(this));
+      },
 
-          // Tính bounding box của mô hình
-          const box = new THREE.Box3().setFromObject(obj);
-          const center = new THREE.Vector3();
-          box.getCenter(center);
+      fit: function () {
+        var el = this.el;
+        var mesh = el.getObject3D('mesh');
+        if (!mesh) return;
 
-          // Điểm đáy ở giữa mô hình
-          const bottom = new THREE.Vector3(center.x, box.min.y, center.z);
+        var obj = el.object3D;
+        var parent = obj.parent;          // = #pivot
 
-          // Chuyển sang tọa độ local của entity
-          this.el.object3D.worldToLocal(bottom);
+        // Đo ở kích thước gốc, tại gốc tọa độ
+        obj.position.set(0, 0, 0);
+        obj.scale.set(1, 1, 1);
+        parent.updateMatrixWorld(true);
 
-          // Căn chỉnh để tâm X, Z ở giữa marker và chân Y chạm mặt marker
-          obj.position.x -= bottom.x;
-          obj.position.y -= bottom.y;
-          obj.position.z -= bottom.z;
+        // Tính bounding box trong hệ tọa độ của #pivot
+        // (nhân với nghịch đảo ma trận của parent nên marker ở đâu cũng không ảnh hưởng)
+        var inv = new THREE.Matrix4().copy(parent.matrixWorld).invert();
+        var m = new THREE.Matrix4();
+        var tmp = new THREE.Box3();
+        var box = new THREE.Box3();
+
+        mesh.traverse(function (o) {
+          if (!o.isMesh || !o.geometry) return;
+          if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+          tmp.copy(o.geometry.boundingBox);
+          m.multiplyMatrices(inv, o.matrixWorld);
+          tmp.applyMatrix4(m);
+          box.union(tmp);
         });
+
+        if (box.isEmpty()) return;
+
+        var size = new THREE.Vector3();
+        var center = new THREE.Vector3();
+        box.getSize(size);
+        box.getCenter(center);
+
+        var maxDim = Math.max(size.x, size.y, size.z);
+        if (!maxDim) return;
+
+        var k = this.data.size / maxDim;
+        obj.scale.setScalar(k);
+        obj.position.copy(center).multiplyScalar(-k);   // tâm mô hình -> gốc #pivot
+
+        el.emit('model-fitted', { halfHeight: size.y * k / 2 });
       }
     });
   </script>
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { touch-action: none; }
     body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
 
     #splash {
@@ -67,7 +101,7 @@
       position: fixed; bottom: 0; left: 0; right: 0; z-index: 9997;
       padding: 16px 20px 30px;
       background: linear-gradient(transparent, rgba(0,0,0,0.7));
-      text-align: center; display: none;
+      text-align: center; display: none; pointer-events: none;
     }
     #hud .hint { color: #fff; font-size: 14px; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
     .status {
@@ -86,7 +120,7 @@
       white-space: nowrap; pointer-events: none;
     }
     #reset-btn {
-      position: fixed; top: 16px; right: 16px; z-index: 9998;
+      position: fixed; top: 56px; right: 16px; z-index: 9998;
       display: none;
       background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25);
       color: #fff; border-radius: 50px; padding: 8px 16px;
@@ -99,7 +133,7 @@
   <!-- Splash overlay - phủ lên AR scene bên dưới -->
   <div id="splash">
     <h1>📦 AR 3D Viewer</h1>
-    <p>Nhấn nút bên dưới để bắt đầu. Hướng camera vào marker Hiro để xem mô hình 3D.</p>
+    <p>Nhấn nút bên dưới để bắt đầu. Hướng camera vào marker Chánh Điện để xem mô hình 3D.</p>
     <button id="start-btn">📷 Bắt đầu AR</button>
     <div class="platform-badge" id="platform-info"></div>
   </div>
@@ -111,7 +145,7 @@
   </div>
 
   <!-- Gesture hint & Reset button -->
-  <div id="gesture-hint">🔄 Vuốt ngang: xoay ngang &nbsp;|&nbsp; ☝️ Vuốt dọc: nghiêng &nbsp;|&nbsp; 🤏 Pinch: zoom</div>
+  <div id="gesture-hint">↔ Vuốt ngang: xoay quanh &nbsp;|&nbsp; ↕ Vuốt dọc: nghiêng &nbsp;|&nbsp; 🤏 Pinch: zoom</div>
   <button id="reset-btn">↺ Reset</button>
 
   <!-- AR Scene - luôn có trong DOM, splash chỉ phủ lên trên -->
@@ -137,13 +171,20 @@
               smooth="true" smoothCount="10"
               smoothTolerance="0.01" smoothThreshold="5"
               id="hiro-marker">
-      <a-entity
-        id="dragon-entity"
-        gltf-model="#myModel"
-        position="0 0 0"
-        rotation="-80 0 0"
-        scale="0.1 0.1 0.1"
-        auto-center>
+
+      <!-- Lớp 1: #base — "mặt đất" của mô hình.
+           rotation="0 0 0"   : marker đặt NẰM trên bàn (mô hình đứng thẳng lên từ marker)
+           rotation="-90 0 0" : marker DỰNG ĐỨNG (cầm sách đứng, hoặc hiện trên màn hình) -->
+      <a-entity id="base" rotation="0 0 0">
+
+        <!-- Lớp 2: #pivot — vuốt/zoom tác động lên lớp này (xoay quanh TÂM mô hình) -->
+        <a-entity id="pivot">
+
+          <!-- Lớp 3: #model — tự co về cỡ cố định và căn tâm.
+               size="1" nghĩa là cạnh lớn nhất = bằng chiều rộng marker. Muốn to hơn thì tăng (vd 1.5) -->
+          <a-entity id="model" gltf-model="#myModel" auto-fit="size: 1"></a-entity>
+
+        </a-entity>
       </a-entity>
     </a-marker>
 
@@ -151,6 +192,17 @@
   </a-scene>
 
   <script>
+    // ── CẤU HÌNH (chỉnh ở đây) ───────────────────────────────────
+    var PITCH_MIN = -60;    // vuốt LÊN tối đa (mặt trước ngửa lên, thấy cửa rõ hơn)
+    var PITCH_MAX = 20;     // vuốt XUỐNG tối đa (cúi nhẹ, thấy mái hơn)
+    var SENS_ROT  = 0.4;    // độ nhạy xoay (độ / px)
+    var YAW_DIR   = 1;      // đổi thành -1 nếu vuốt ngang bị ngược chiều
+    var PITCH_DIR = 1;      // đổi thành -1 nếu vuốt dọc bị ngược chiều
+    var AXIS_LOCK = true;   // true: mỗi lần vuốt chỉ xoay 1 trục (ngang HOẶC dọc) — không bị lệch chéo
+    var LOCK_PX   = 8;      // vuốt quá ngần này px thì mới chốt trục
+    var ZOOM_MIN  = 0.4;    // zoom nhỏ nhất (so với cỡ ban đầu)
+    var ZOOM_MAX  = 3;      // zoom lớn nhất
+
     // Platform detection
     var ua = navigator.userAgent;
     var info = /iPhone|iPad|iPod/.test(ua) ? '🍎 iOS — Dùng Safari'
@@ -159,152 +211,149 @@
     document.getElementById('platform-info').textContent = info;
 
     // Start button - chỉ ẩn splash, AR scene đã chạy bên dưới
-    document.getElementById('start-btn').addEventListener('click', function() {
+    document.getElementById('start-btn').addEventListener('click', function () {
       document.getElementById('splash').style.display = 'none';
       document.getElementById('hud').style.display = 'block';
       document.getElementById('gesture-hint').style.display = 'block';
       document.getElementById('reset-btn').style.display = 'block';
-
-      // Marker events
-      var marker = document.getElementById('hiro-marker');
-      var statusEl = document.getElementById('marker-status');
-      if (marker) {
-        marker.addEventListener('markerFound', function() {
-          statusEl.textContent = '✅ Marker đã nhận diện!';
-          statusEl.className = 'status status-found';
-        });
-        marker.addEventListener('markerLost', function() {
-          statusEl.textContent = '🔍 Đang tìm marker...';
-          statusEl.className = 'status status-searching';
-        });
-      }
     });
 
-    // ── GESTURE CONTROLS ──────────────────────────────────────────
-    // Vuốt ngang  → xoay Y  (quay vòng quanh mô hình)
-    // Vuốt dọc   → xoay X  (nghiêng: từ nhìn nóc → nhìn mặt bên)
-    // Pinch 2 ngón → scale (zoom)
-    var entity = document.getElementById('dragon-entity');
+    // Marker events
+    var marker = document.getElementById('hiro-marker');
+    var statusEl = document.getElementById('marker-status');
+    marker.addEventListener('markerFound', function () {
+      statusEl.textContent = '✅ Marker đã nhận diện!';
+      statusEl.className = 'status status-found';
+    });
+    marker.addEventListener('markerLost', function () {
+      statusEl.textContent = '🔍 Đang tìm marker...';
+      statusEl.className = 'status status-searching';
+    });
 
-    var rotX    = -80;   // bắt đầu nghiêng sẵn để thấy mặt bên (không chỉ nóc)
-    var rotY    = 0;     // xoay ngang
-    var scl     = 0.1;   // scale hiện tại (đồng bộ với attribute ban đầu)
+    // ── GESTURE CONTROLS ─────────────────────────────────────────
+    // Vuốt ngang  → yaw   : xoay quanh trục ĐỨNG của mô hình (nền luôn ở dưới chân)
+    // Vuốt dọc    → pitch : nghiêng tới/lui, có giới hạn nên mô hình không bao giờ ngã nằm
+    // Pinch 2 ngón→ zoom  : nhân theo TỈ LỆ khoảng cách 2 ngón (mượt, không nhảy cỡ)
+    var pivot = document.getElementById('pivot');
 
-    var SENS_ROT  = 0.4;  // độ nhạy xoay (°/px)
-    var SENS_ZOOM = 0.005; // độ nhạy zoom
+    var yaw = 0, pitch = 0, zoom = 1;
+    var halfH = 0;   // nửa chiều cao mô hình (đơn vị marker), do auto-fit báo về
 
-    function applyTransform() {
-      // Giới hạn rotX: -90° (nhìn nóc) → 10° (nhìn hơi từ dưới lên)
-      rotX = Math.max(-90, Math.min(10, rotX));
-      scl  = Math.max(0.02, Math.min(1.0, scl));
-      entity.setAttribute('rotation', rotX + ' ' + rotY + ' 0');
-      entity.setAttribute('scale',    scl + ' ' + scl + ' ' + scl);
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+    function apply() {
+      pitch = clamp(pitch, PITCH_MIN, PITCH_MAX);
+      zoom  = clamp(zoom, ZOOM_MIN, ZOOM_MAX);
+
+      var o = pivot.object3D;
+      // Euler 'XYZ': xoay yaw (quanh trục đứng của mô hình) trước, rồi mới nghiêng pitch
+      o.rotation.set(pitch * Math.PI / 180, yaw * Math.PI / 180, 0);
+      o.scale.setScalar(zoom);
+      // Nâng tâm lên nửa chiều cao => chân mô hình chạm mặt marker, và zoom thì chân vẫn chạm
+      o.position.set(0, halfH * zoom, 0);
     }
 
-    // Reset
-    document.getElementById('reset-btn').addEventListener('click', function() {
-      rotX = -80;
-      rotY = 0;
-      scl  = 0.1;
-      applyTransform();
+    document.addEventListener('model-fitted', function (e) {
+      halfH = e.detail.halfHeight;
+      apply();
     });
 
-    // ── TOUCH ─────────────────────────────────────────────────────
-    var lastTouchX  = null;
-    var lastTouchY  = null;
-    var lastPinchDist = null;
+    document.getElementById('reset-btn').addEventListener('click', function () {
+      yaw = 0; pitch = 0; zoom = 1;
+      apply();
+    });
 
-    function getPinchDist(touches) {
-      var dx = touches[0].clientX - touches[1].clientX;
-      var dy = touches[0].clientY - touches[1].clientY;
+    // ── Kéo (dùng chung cho cảm ứng và chuột) ──
+    var drag = null;
+
+    function dragStart(x, y) {
+      drag = { x: x, y: y, ax: 0, ay: 0, lock: null };
+    }
+
+    function dragMove(x, y) {
+      if (!drag) return;
+      var dx = x - drag.x;
+      var dy = y - drag.y;
+      drag.x = x;
+      drag.y = y;
+
+      if (AXIS_LOCK && !drag.lock) {
+        drag.ax += dx;
+        drag.ay += dy;
+        if (Math.abs(drag.ax) < LOCK_PX && Math.abs(drag.ay) < LOCK_PX) return;
+        drag.lock = Math.abs(drag.ax) >= Math.abs(drag.ay) ? 'x' : 'y';
+        dx = drag.ax;   // áp dụng phần đã vuốt từ đầu
+        dy = drag.ay;
+      }
+
+      if (!AXIS_LOCK || drag.lock === 'x') yaw   += dx * SENS_ROT * YAW_DIR;
+      if (!AXIS_LOCK || drag.lock === 'y') pitch += dy * SENS_ROT * PITCH_DIR;
+      apply();
+    }
+
+    function dragEnd() { drag = null; }
+
+    // ── TOUCH ──
+    var lastPinch = null;
+
+    function pinchDist(t) {
+      var dx = t[0].clientX - t[1].clientX;
+      var dy = t[0].clientY - t[1].clientY;
       return Math.sqrt(dx * dx + dy * dy);
     }
 
-    document.addEventListener('touchstart', function(e) {
+    document.addEventListener('touchstart', function (e) {
       if (e.touches.length === 1) {
-        lastTouchX    = e.touches[0].clientX;
-        lastTouchY    = e.touches[0].clientY;
-        lastPinchDist = null;
+        lastPinch = null;
+        dragStart(e.touches[0].clientX, e.touches[0].clientY);
       } else if (e.touches.length === 2) {
-        lastPinchDist = getPinchDist(e.touches);
-        lastTouchX = lastTouchY = null;
+        dragEnd();
+        lastPinch = pinchDist(e.touches);
       }
     }, { passive: true });
 
-    document.addEventListener('touchmove', function(e) {
-      if (!entity) return;
-
+    document.addEventListener('touchmove', function (e) {
       if (e.touches.length === 2) {
-        // ── PINCH ZOOM ──
-        var dist = getPinchDist(e.touches);
-        if (lastPinchDist !== null) {
-          var delta = dist - lastPinchDist;
-          scl += delta * SENS_ZOOM;
-          applyTransform();
+        var d = pinchDist(e.touches);
+        if (lastPinch) {
+          zoom *= d / lastPinch;
+          apply();
         }
-        lastPinchDist = dist;
+        lastPinch = d;
         return;
       }
-
-      if (e.touches.length !== 1 || lastTouchX === null) return;
-
-      var x  = e.touches[0].clientX;
-      var y  = e.touches[0].clientY;
-      var dx = x - lastTouchX;
-      var dy = y - lastTouchY;
-
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        // Chủ yếu ngang → xoay Y (quay quanh mô hình)
-        rotY += dx * SENS_ROT;
-      } else {
-        // Chủ yếu dọc → xoay X (nghiêng mô hình)
-        // Vuốt lên (dy âm) → ngẩng lên (rotX tăng về 0/dương)
-        // Vuốt xuống (dy dương) → cúi xuống (rotX giảm về -90)
-        rotX += dy * SENS_ROT;
+      if (e.touches.length === 1) {
+        dragMove(e.touches[0].clientX, e.touches[0].clientY);
       }
-      applyTransform();
-
-      lastTouchX = x;
-      lastTouchY = y;
     }, { passive: true });
 
-    document.addEventListener('touchend', function(e) {
-      if (e.touches.length < 2) lastPinchDist = null;
-      if (e.touches.length === 0) { lastTouchX = lastTouchY = null; }
-    }, { passive: true });
-
-    // ── MOUSE (desktop) ──────────────────────────────────────────
-    var mouseDown  = false;
-    var lastMouseX = null;
-    var lastMouseY = null;
-
-    document.addEventListener('mousedown', function(e) {
-      mouseDown  = true;
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-    });
-    document.addEventListener('mouseup', function() { mouseDown = false; });
-    document.addEventListener('mousemove', function(e) {
-      if (!mouseDown || !entity) return;
-      var dx = e.clientX - lastMouseX;
-      var dy = e.clientY - lastMouseY;
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        rotY += dx * SENS_ROT;
+    document.addEventListener('touchend', function (e) {
+      lastPinch = null;
+      if (e.touches.length === 1) {
+        // nhấc bớt 1 ngón: tiếp tục kéo bằng ngón còn lại, không bị giật
+        dragStart(e.touches[0].clientX, e.touches[0].clientY);
       } else {
-        rotX += dy * SENS_ROT;
+        dragEnd();
       }
-      applyTransform();
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-    });
-
-    // Mouse wheel zoom (desktop)
-    document.addEventListener('wheel', function(e) {
-      if (!entity) return;
-      scl -= e.deltaY * 0.0003;
-      applyTransform();
     }, { passive: true });
-  
+
+    document.addEventListener('touchcancel', function () {
+      lastPinch = null;
+      dragEnd();
+    }, { passive: true });
+
+    // Chặn iOS tự zoom trang khi pinch
+    document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+
+    // ── MOUSE (desktop) ──
+    document.addEventListener('mousedown', function (e) { dragStart(e.clientX, e.clientY); });
+    document.addEventListener('mousemove', function (e) { dragMove(e.clientX, e.clientY); });
+    document.addEventListener('mouseup', dragEnd);
+
+    document.addEventListener('wheel', function (e) {
+      zoom *= Math.exp(-e.deltaY * 0.001);
+      apply();
+    }, { passive: true });
   </script>
 </body>
 </html>
