@@ -6,201 +6,65 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>AR 3D Viewer</title>
 
+  <!-- Thư viện AR -->
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
 
+  <!-- A-Frame components (phải đăng ký trước khi scene khởi động) -->
   <script>
     AFRAME.registerComponent('auto-fit', {
       schema: { size: { type: 'number', default: 1 } },
-
-      init: function () {
-        this.el.addEventListener('model-loaded', this.fit.bind(this));
-      },
-
+      init: function () { this.el.addEventListener('model-loaded', this.fit.bind(this)); },
       fit: function () {
-        var el = this.el;
-        var mesh = el.getObject3D('mesh');
+        var el = this.el, mesh = el.getObject3D('mesh');
         if (!mesh) return;
-
-        var obj = el.object3D;
-        var parent = obj.parent;
-
-        obj.position.set(0, 0, 0);
-        obj.scale.set(1, 1, 1);
+        var obj = el.object3D, parent = obj.parent;
+        obj.position.set(0, 0, 0); obj.scale.set(1, 1, 1);
         parent.updateMatrixWorld(true);
-
         var inv = new THREE.Matrix4().copy(parent.matrixWorld).invert();
-        var m = new THREE.Matrix4();
-        var tmp = new THREE.Box3();
-        var box = new THREE.Box3();
-        var meshes = [];
-
+        var m = new THREE.Matrix4(), tmp = new THREE.Box3(), box = new THREE.Box3(), meshes = [];
         mesh.traverse(function (o) {
           if (!o.isMesh || !o.geometry) return;
           if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
           tmp.copy(o.geometry.boundingBox);
-          m.multiplyMatrices(inv, o.matrixWorld);
-          tmp.applyMatrix4(m);
-          box.union(tmp);
+          m.multiplyMatrices(inv, o.matrixWorld); tmp.applyMatrix4(m); box.union(tmp);
           if (o.geometry.attributes.position) meshes.push(o);
         });
-
         if (box.isEmpty()) return;
-
-        var size = new THREE.Vector3();
-        var center = new THREE.Vector3();
-        box.getSize(size);
-        box.getCenter(center);
-
-        var maxDim = Math.max(size.x, size.y, size.z);
-        if (!maxDim) return;
-
+        var size = new THREE.Vector3(), center = new THREE.Vector3();
+        box.getSize(size); box.getCenter(center);
+        var maxDim = Math.max(size.x, size.y, size.z); if (!maxDim) return;
         var k = this.data.size / maxDim;
-        obj.scale.setScalar(k);
-        obj.position.copy(center).multiplyScalar(-k);
-
-        // Tìm chóp mái: điểm cao nhất của mô hình (lấy trung bình các đỉnh sát độ cao tối đa)
-        var v = new THREE.Vector3();
-        var maxY = -Infinity;
+        obj.scale.setScalar(k); obj.position.copy(center).multiplyScalar(-k);
+        var v = new THREE.Vector3(), maxY = -Infinity;
         meshes.forEach(function (o) {
           m.multiplyMatrices(inv, o.matrixWorld);
           var pos = o.geometry.attributes.position;
-          for (var i = 0; i < pos.count; i++) {
-            v.fromBufferAttribute(pos, i).applyMatrix4(m);
-            if (v.y > maxY) maxY = v.y;
-          }
+          for (var i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(m); if (v.y > maxY) maxY = v.y; }
         });
-
         var tol = size.y * 0.03, sx = 0, sz = 0, n = 0;
         meshes.forEach(function (o) {
           m.multiplyMatrices(inv, o.matrixWorld);
           var pos = o.geometry.attributes.position;
-          for (var i = 0; i < pos.count; i++) {
-            v.fromBufferAttribute(pos, i).applyMatrix4(m);
-            if (v.y >= maxY - tol) { sx += v.x; sz += v.z; n++; }
-          }
+          for (var i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(m); if (v.y >= maxY - tol) { sx += v.x; sz += v.z; n++; } }
         });
-
-        var top = n
-          ? { x: (sx / n - center.x) * k, y: (maxY - center.y) * k, z: (sz / n - center.z) * k }
-          : { x: 0, y: size.y * k / 2, z: 0 };
-
+        var top = n ? { x: (sx/n - center.x)*k, y: (maxY - center.y)*k, z: (sz/n - center.z)*k }
+                    : { x: 0, y: size.y*k/2, z: 0 };
         el.emit('model-fitted', { halfHeight: size.y * k / 2, top: top });
       }
     });
 
     AFRAME.registerComponent('frame-tick', {
-      tick: function (t, dt) {
-        if (window.onFrame) window.onFrame(dt);
-      }
+      tick: function (t, dt) { if (window.onFrame) window.onFrame(dt); }
     });
   </script>
 
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { touch-action: none; }
-    body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-
-    #splash {
-      position: fixed; inset: 0; z-index: 10000;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      color: #fff; padding: 20px; text-align: center;
-    }
-    #splash h1 { font-size: 28px; margin-bottom: 8px; }
-    #splash p { font-size: 15px; color: #aaa; margin-bottom: 30px; max-width: 320px; }
-    #start-btn {
-      padding: 18px 50px; font-size: 18px; font-weight: 600;
-      background: linear-gradient(135deg, #00b4d8, #0077b6);
-      color: #fff; border: none; border-radius: 50px; cursor: pointer;
-      box-shadow: 0 6px 25px rgba(0,180,216,0.4);
-    }
-    #start-btn:active { transform: scale(0.95); }
-    .platform-badge {
-      margin-top: 20px; font-size: 12px; color: #666;
-      padding: 6px 14px; border: 1px solid #333; border-radius: 20px;
-    }
-
-    #hud {
-      position: fixed; bottom: 0; left: 0; right: 0; z-index: 9997;
-      padding: 16px 20px 30px;
-      background: linear-gradient(transparent, rgba(0,0,0,0.7));
-      text-align: center; display: none; pointer-events: none;
-    }
-    #hud .hint { color: #fff; font-size: 14px; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
-    .status {
-      display: inline-block; margin-top: 8px; padding: 4px 12px;
-      border-radius: 20px; font-size: 12px; font-weight: 600;
-    }
-    .status-searching { background: rgba(255,193,7,0.3); color: #ffc107; border: 1px solid rgba(255,193,7,0.5); }
-    .status-found { background: rgba(76,175,80,0.3); color: #4caf50; border: 1px solid rgba(76,175,80,0.5); }
-
-    #reset-btn {
-      position: fixed; top: 16px; right: 16px; z-index: 9998;
-      display: none;
-      background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25);
-      color: #fff; border-radius: 50px; padding: 8px 16px;
-      font-size: 13px; cursor: pointer;
-    }
-
-    #info-btn {
-      position: fixed; top: 16px; left: 16px; z-index: 9998;
-      display: none;
-      background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25);
-      color: #fff; border-radius: 50%; width: 42px; height: 42px;
-      font-size: 20px; cursor: pointer; line-height: 42px; text-align: center;
-    }
-
-    #info-overlay {
-      position: fixed; inset: 0; z-index: 9998;
-      background: rgba(0,0,0,0.3);
-      display: none;
-    }
-
-    #info-panel {
-      position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999;
-      background: rgba(255,255,255,0.97);
-      border-radius: 20px 20px 0 0;
-      padding: 20px 20px 36px;
-      box-shadow: 0 -4px 30px rgba(0,0,0,0.3);
-      transform: translateY(100%);
-      transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
-      max-height: 60vh; overflow-y: auto;
-      touch-action: pan-y;
-    }
-    #info-panel.open { transform: translateY(0); }
-    #info-panel .panel-handle {
-      width: 40px; height: 4px; border-radius: 2px;
-      background: #ccc; margin: 0 auto 16px;
-    }
-    #info-panel .panel-tag {
-      display: inline-block; font-size: 12px; font-weight: 700;
-      color: #c8860a; background: #fff4de;
-      border: 1px solid #f5c842; border-radius: 20px;
-      padding: 3px 10px; margin-bottom: 10px;
-    }
-    #info-panel h2 {
-      font-size: 20px; font-weight: 700; color: #1a1a1a;
-      margin-bottom: 10px; line-height: 1.3;
-    }
-    #info-panel .divider {
-      border: none; border-top: 1px solid #eee; margin: 12px 0;
-    }
-    #info-panel p {
-      font-size: 15px; color: #444; line-height: 1.7;
-      white-space: pre-line;
-    }
-    #info-panel .close-panel {
-      position: absolute; top: 16px; right: 16px;
-      background: #f0f0f0; border: none; border-radius: 50%;
-      width: 32px; height: 32px; font-size: 16px; cursor: pointer;
-      line-height: 32px; text-align: center; color: #555;
-    }
-  </style>
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
+  <!-- Splash -->
   <div id="splash">
     <h1>📦 AR 3D Viewer</h1>
     <p>Nhấn nút bên dưới để bắt đầu. Hướng camera vào marker Chánh Điện để xem mô hình 3D.</p>
@@ -208,25 +72,27 @@
     <div class="platform-badge" id="platform-info"></div>
   </div>
 
+  <!-- HUD -->
   <div id="hud">
     <div class="hint">📌 Hướng camera vào marker Chánh Điện</div>
     <div class="status status-searching" id="marker-status">🔍 Đang tìm marker...</div>
   </div>
 
+  <!-- Nút điều khiển -->
   <button id="reset-btn">↺ Reset</button>
   <button id="info-btn">ℹ️</button>
 
+  <!-- Info panel -->
   <div id="info-overlay"></div>
-
   <div id="info-panel">
     <div class="panel-handle"></div>
     <button class="close-panel" id="close-panel-btn">✕</button>
-    <div class="panel-tag" id="panel-tag"></div>
     <h2 id="panel-title"></h2>
     <hr class="divider">
     <p id="panel-body"></p>
   </div>
 
+  <!-- AR Scene -->
   <a-scene
       embedded
       vr-mode-ui="enabled: false"
@@ -241,7 +107,7 @@
       <a-asset-item id="myModel" src="models/chanh_dien.glb"></a-asset-item>
     </a-assets>
 
-    <a-light type="ambient" color="#ffffff" intensity="0.9"></a-light>
+    <a-light type="ambient"     color="#ffffff" intensity="0.9"></a-light>
     <a-light type="directional" color="#ffffff" intensity="0.8" position="1 3 2"></a-light>
 
     <a-marker type="pattern" url="marker/pattern_chanh_dien.patt"
@@ -251,606 +117,17 @@
               id="hiro-marker">
 
       <a-entity id="base" rotation="0 0 0" frame-tick>
-
         <a-entity id="pivot">
           <a-entity id="model" gltf-model="#myModel" auto-fit="size: 1"></a-entity>
         </a-entity>
-
         <a-entity id="card"></a-entity>
-
       </a-entity>
     </a-marker>
 
     <a-entity camera></a-entity>
   </a-scene>
 
-  <script>
-    // ── NỘI DUNG THÔNG TIN (sửa ở đây) ───────────────────────────
-    var INFO = {
-      tag:   'Di tích lịch sử',
-      title: 'Chánh Điện',
-      body:  'Chánh điện được thiết kế theo kiến trúc 8 mái,...'
-      // Muốn xuống dòng trong popup: dùng \n
-    };
-
-    // ── CẤU HÌNH ─────────────────────────────────────────────────
-    var PITCH_MIN = -60;
-    var PITCH_MAX = 20;
-    var SENS_ROT  = 0.4;
-    var YAW_DIR   = 1;       // -1 nếu vuốt ngang bị ngược
-    var PITCH_DIR = 1;       // -1 nếu vuốt dọc bị ngược
-    var AXIS_LOCK = true;
-    var LOCK_PX   = 8;
-    var ZOOM_MIN  = 0.4;
-    var ZOOM_MAX  = 3;
-
-    // Hiệu ứng xuất hiện
-    var INTRO_MS        = 2200;   // thời gian hiệu ứng (mili-giây)
-    var INTRO_SPIN      = 180;    // góc xoay lúc đầu (độ); đổi dấu nếu muốn xoay ngược chiều
-    var INTRO_CLIP      = true;   // true: phần dưới mặt marker bị cắt (như trồi lên từ mặt giấy)
-    var INTRO_REPLAY    = true;   // true: mất marker rồi quét lại thì chạy lại hiệu ứng
-    var REPLAY_AFTER_MS = 2000;   // mất marker quá ngần này mới tính là "quét lại"
-
-    // Chấm sáng (hotspot)
-    var HOTSPOT_SIZE   = 0.2;                    // cỡ chấm + vòng lan toả (1 = bề rộng marker)
-    var HOTSPOT_OFFSET = { x: 0, y: 0.02, z: 0 };// dịch thêm so với chóp mái (+y = lên)
-    var HOTSPOT_POS    = null;                   // null = tự tìm chóp mái; hoặc { x: 0, y: 0.3, z: 0 } để tự chọn điểm (gốc = tâm mô hình)
-    var HIT_PX         = 52;                     // vùng chạm quanh chấm (pixel)
-
-    // Thẻ thông tin trong AR
-    var CARD_W         = 0.9;                    // bề rộng thẻ (1 = bề rộng marker)
-    var CARD_H         = CARD_W / 2;
-    var CARD_GAP       = 0.1;                    // khoảng cách từ chấm sáng đến mép dưới thẻ
-    var CARD_MAX_LINES = 4;                      // số dòng tối đa trên thẻ, dài hơn sẽ cắt "…"
-    var CARD_ANIM_MS   = 350;                    // thời gian bung ra / thu lại
-
-    var D2R = Math.PI / 180;
-
-    // ── Giao diện ────────────────────────────────────────────────
-    var ua = navigator.userAgent;
-    document.getElementById('platform-info').textContent =
-        /iPhone|iPad|iPod/.test(ua) ? '🍎 iOS — Dùng Safari'
-      : /Android/.test(ua) ? '🤖 Android — Dùng Chrome'
-      : '💻 Desktop — Cần webcam';
-
-    document.getElementById('panel-tag').textContent = INFO.tag;
-    document.getElementById('panel-title').textContent = INFO.title;
-    document.getElementById('panel-body').textContent = INFO.body;
-
-    document.getElementById('start-btn').addEventListener('click', function () {
-      document.getElementById('splash').style.display = 'none';
-      document.getElementById('hud').style.display = 'block';
-      document.getElementById('reset-btn').style.display = 'block';
-      document.getElementById('info-btn').style.display = 'block';
-    });
-
-    var panel = document.getElementById('info-panel');
-    var overlay = document.getElementById('info-overlay');
-    var panelOpen = false;
-
-    function setPanel(open) {
-      panelOpen = open;
-      panel.classList.toggle('open', open);
-      overlay.style.display = open ? 'block' : 'none';
-    }
-
-    document.getElementById('info-btn').addEventListener('click', function () { setPanel(!panelOpen); });
-    document.getElementById('close-panel-btn').addEventListener('click', function () { setPanel(false); });
-    overlay.addEventListener('click', function () { setPanel(false); });
-
-    // ── Trạng thái chung ─────────────────────────────────────────
-    var sceneEl = document.querySelector('a-scene');
-    var baseEl = document.getElementById('base');
-    var cardEl = document.getElementById('card');
-    var pivot = document.getElementById('pivot');
-
-    var yaw = 0, pitch = 0, zoom = 1;
-    var halfH = 0;
-    var modelReady = false;
-    var mats = [];
-    var clipOn = false;
-    var clipPlane = new THREE.Plane();
-    var intro = { t: INTRO_MS };
-    var markerVisible = false;
-    var lostAt = 0;
-    var hasPlayed = false;
-
-    var cardOpen = false, cardT = 0;
-    var cardMesh = null, cardMat = null, cardTruncated = false;
-    var lineObj = null, lineGeo = null;
-    var hot = null, dotMesh = null, ringMeshes = [];
-    var topPoint = null;
-
-    var qCam = new THREE.Quaternion();
-    var qTmp = new THREE.Quaternion();
-    var vBase = new THREE.Vector3();
-    var vUp = new THREE.Vector3();
-    var vEnd = new THREE.Vector3();
-    var vHot = new THREE.Vector3();
-    var ray = new THREE.Raycaster();
-    var ndc = new THREE.Vector2();
-
-    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-    function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
-
-    // ── Marker ───────────────────────────────────────────────────
-    var marker = document.getElementById('hiro-marker');
-    var statusEl = document.getElementById('marker-status');
-
-    marker.addEventListener('markerFound', function () {
-      markerVisible = true;
-      statusEl.textContent = '✅ Marker đã nhận diện!';
-      statusEl.className = 'status status-found';
-      if (!hasPlayed || (INTRO_REPLAY && Date.now() - lostAt > REPLAY_AFTER_MS)) startIntro();
-    });
-    marker.addEventListener('markerLost', function () {
-      markerVisible = false;
-      lostAt = Date.now();
-      statusEl.textContent = '🔍 Đang tìm marker...';
-      statusEl.className = 'status status-searching';
-    });
-
-    // ── Vẽ thẻ thông tin + chấm sáng (canvas → texture) ──────────
-    function makeTex(c) {
-      var t = new THREE.CanvasTexture(c);
-      if (THREE.sRGBEncoding) t.encoding = THREE.sRGBEncoding;
-      t.anisotropy = 4;
-      return t;
-    }
-
-    function roundRect(ctx, x, y, w, h, r) {
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.arcTo(x + w, y, x + w, y + h, r);
-      ctx.arcTo(x + w, y + h, x, y + h, r);
-      ctx.arcTo(x, y + h, x, y, r);
-      ctx.arcTo(x, y, x + w, y, r);
-      ctx.closePath();
-    }
-
-    function wrapLines(ctx, text, maxW) {
-      var words = text.replace(/\s+/g, ' ').trim().split(' ');
-      var lines = [], line = '';
-      words.forEach(function (w) {
-        var t = line ? line + ' ' + w : w;
-        if (line && ctx.measureText(t).width > maxW) { lines.push(line); line = w; }
-        else line = t;
-      });
-      if (line) lines.push(line);
-      return lines;
-    }
-
-    function buildCard() {
-      var W = 1024, H = 512, PAD = 48;
-      var FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      var c = document.createElement('canvas');
-      c.width = W; c.height = H;
-      var ctx = c.getContext('2d');
-
-      ctx.fillStyle = 'rgba(255,255,255,0.97)';
-      roundRect(ctx, 0, 0, W, H, 44);
-      ctx.fill();
-
-      ctx.font = '700 24px ' + FONT;
-      var tw = ctx.measureText(INFO.tag).width;
-      roundRect(ctx, PAD, 38, tw + 36, 40, 20);
-      ctx.fillStyle = '#fff4de'; ctx.fill();
-      ctx.strokeStyle = '#f5c842'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = '#c8860a';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(INFO.tag, PAD + 18, 59);
-
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = '#1a1a1a';
-      ctx.font = '700 62px ' + FONT;
-      ctx.fillText(INFO.title, PAD, 150);
-
-      ctx.fillStyle = '#e6e6e6';
-      ctx.fillRect(PAD, 176, W - 2 * PAD, 2);
-
-      ctx.font = '400 30px ' + FONT;
-      ctx.fillStyle = '#444';
-      var maxW = W - 2 * PAD;
-      var lines = wrapLines(ctx, INFO.body, maxW);
-      cardTruncated = lines.length > CARD_MAX_LINES;
-      if (cardTruncated) {
-        lines = lines.slice(0, CARD_MAX_LINES);
-        var last = lines[CARD_MAX_LINES - 1];
-        while (last && ctx.measureText(last + '…').width > maxW) last = last.slice(0, -1);
-        lines[CARD_MAX_LINES - 1] = last.replace(/[\s,.;:]+$/, '') + '…';
-      }
-      lines.forEach(function (l, i) { ctx.fillText(l, PAD, 228 + i * 46); });
-
-      if (cardTruncated) {
-        ctx.font = '600 26px ' + FONT;
-        ctx.fillStyle = '#0077b6';
-        ctx.textAlign = 'right';
-        ctx.fillText('Chạm để xem thêm ›', W - PAD, 478);
-      }
-
-      cardMat = new THREE.MeshBasicMaterial({
-        map: makeTex(c), transparent: true, opacity: 0,
-        depthTest: false, depthWrite: false, toneMapped: false
-      });
-      cardMesh = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H), cardMat);
-      cardMesh.renderOrder = 1001;
-      cardMesh.visible = false;
-      cardEl.setObject3D('mesh', cardMesh);
-
-      lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-      lineObj = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0x00b4d8, depthTest: false }));
-      lineObj.renderOrder = 1000;
-      lineObj.frustumCulled = false;
-      lineObj.visible = false;
-      baseEl.object3D.add(lineObj);
-    }
-
-    function buildHotspot() {
-      var S = 128;
-
-      var c1 = document.createElement('canvas');
-      c1.width = c1.height = S;
-      var g1 = c1.getContext('2d');
-      var grd = g1.createRadialGradient(64, 64, 0, 64, 64, 64);
-      grd.addColorStop(0,    'rgba(255,255,255,1)');
-      grd.addColorStop(0.17, 'rgba(255,255,255,1)');
-      grd.addColorStop(0.20, 'rgba(0,180,216,1)');
-      grd.addColorStop(0.30, 'rgba(0,180,216,0.9)');
-      grd.addColorStop(0.55, 'rgba(0,180,216,0.28)');
-      grd.addColorStop(1,    'rgba(0,180,216,0)');
-      g1.fillStyle = grd;
-      g1.fillRect(0, 0, S, S);
-
-      var c2 = document.createElement('canvas');
-      c2.width = c2.height = S;
-      var g2 = c2.getContext('2d');
-      g2.strokeStyle = 'rgba(0,180,216,1)';
-      g2.lineWidth = 6;
-      g2.shadowColor = 'rgba(0,180,216,1)';
-      g2.shadowBlur = 8;
-      g2.beginPath();
-      g2.arc(64, 64, 52, 0, Math.PI * 2);
-      g2.stroke();
-
-      function mat(tex) {
-        return new THREE.MeshBasicMaterial({
-          map: tex, transparent: true, opacity: 0,
-          depthTest: false, depthWrite: false, toneMapped: false
-        });
-      }
-
-      var geo = new THREE.PlaneGeometry(HOTSPOT_SIZE, HOTSPOT_SIZE);
-      hot = new THREE.Group();
-
-      var ringTex = makeTex(c2);
-      for (var i = 0; i < 2; i++) {
-        var r = new THREE.Mesh(geo, mat(ringTex));
-        r.renderOrder = 999;
-        ringMeshes.push(r);
-        hot.add(r);
-      }
-      dotMesh = new THREE.Mesh(geo, mat(makeTex(c1)));
-      dotMesh.renderOrder = 1000;
-      hot.add(dotMesh);
-
-      hot.visible = false;
-      pivot.object3D.add(hot);
-      placeHotspot();
-    }
-
-    function placeHotspot() {
-      if (!hot || !topPoint) return;
-      var b = HOTSPOT_POS || topPoint;
-      hot.position.set(b.x + HOTSPOT_OFFSET.x, b.y + HOTSPOT_OFFSET.y, b.z + HOTSPOT_OFFSET.z);
-    }
-
-    // ── Hiệu ứng xuất hiện của mô hình ───────────────────────────
-    function startIntro() {
-      hasPlayed = true;
-      intro.t = 0;
-      cardOpen = false;
-      cardT = 0;
-      apply();
-    }
-
-    function collectMaterials() {
-      var mesh = document.getElementById('model').getObject3D('mesh');
-      mats = [];
-      if (!mesh) return;
-      mesh.traverse(function (o) {
-        if (!o.isMesh) return;
-        (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) {
-          if (!m) return;
-          if (mats.every(function (e) { return e.m !== m; })) {
-            mats.push({ m: m, transparent: m.transparent, opacity: m.opacity });
-          }
-        });
-      });
-    }
-
-    function setClip(on) {
-      if (on === clipOn) return;
-      clipOn = on;
-      if (on) sceneEl.renderer.localClippingEnabled = true;
-      mats.forEach(function (e) {
-        e.m.clippingPlanes = on ? [clipPlane] : null;
-        e.m.needsUpdate = true;
-      });
-    }
-
-    function updateClipPlane() {
-      var o = baseEl.object3D;
-      o.updateWorldMatrix(true, false);
-      var n = new THREE.Vector3(0, 1, 0).transformDirection(o.matrixWorld);
-      var p = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
-      clipPlane.setFromNormalAndCoplanarPoint(n, p);
-    }
-
-    function setModelAlpha(a) {
-      mats.forEach(function (e) {
-        var t = a < 1 ? true : e.transparent;
-        if (e.m.transparent !== t) { e.m.transparent = t; e.m.needsUpdate = true; }
-        e.m.opacity = a < 1 ? e.opacity * a : e.opacity;
-      });
-    }
-
-    function updateModelVisuals(prog) {
-      if (!modelReady) return;
-      setClip(INTRO_CLIP && prog < 1);
-      if (clipOn) updateClipPlane();
-      setModelAlpha(clamp(prog / 0.6, 0, 1));
-    }
-
-    function apply() {
-      pitch = clamp(pitch, PITCH_MIN, PITCH_MAX);
-      zoom  = clamp(zoom, ZOOM_MIN, ZOOM_MAX);
-
-      var prog = clamp(intro.t / INTRO_MS, 0, 1);
-      var ease = easeOut(prog);
-
-      var o = pivot.object3D;
-      o.rotation.set(pitch * D2R, (yaw + INTRO_SPIN * (1 - ease)) * D2R, 0);
-      o.scale.setScalar(zoom);
-      o.position.set(0, halfH * zoom - (2 * halfH * zoom + 0.08) * (1 - ease), 0);
-
-      updateModelVisuals(prog);
-    }
-
-    // ── Chấm sáng + thẻ: chạy mỗi khung hình ─────────────────────
-    function updateOverlay(dt) {
-      if (!hot || !cardMesh) return;
-
-      var prog = clamp(intro.t / INTRO_MS, 0, 1);
-      var a = clamp((prog - 0.85) / 0.15, 0, 1);
-      hot.visible = a > 0.01;
-      if (!hot.visible || !markerVisible) {
-        cardMesh.visible = false;
-        lineObj.visible = false;
-        return;
-      }
-
-      var cam = sceneEl.camera;
-      if (!cam) return;
-      cam.getWorldQuaternion(qCam);
-
-      // Chấm sáng luôn quay mặt về camera và giữ cỡ cố định khi zoom
-      pivot.object3D.getWorldQuaternion(qTmp);
-      hot.quaternion.copy(qTmp).invert().multiply(qCam);
-      hot.scale.setScalar(1 / zoom);
-
-      cardT = clamp(cardT + (cardOpen ? dt : -dt) / CARD_ANIM_MS, 0, 1);
-      var s = easeOut(cardT);
-
-      var t = performance.now() / 1000;
-      dotMesh.material.opacity = a;
-      dotMesh.scale.setScalar(1 + 0.08 * Math.sin(t * 4));
-      ringMeshes.forEach(function (r, i) {
-        var p = (t / 1.8 + i * 0.5) % 1;
-        r.scale.setScalar(0.3 + p * 1.1);
-        r.material.opacity = Math.pow(1 - p, 1.3) * 0.9 * a * (1 - s);
-      });
-
-      cardMat.opacity = s;
-      cardMesh.visible = s > 0.01;
-      if (!cardMesh.visible) { lineObj.visible = false; return; }
-
-      // Thẻ bung ra từ chấm sáng, nằm phía trên chấm theo chiều dọc của MÀN HÌNH
-      hot.getWorldPosition(vBase);
-      baseEl.object3D.worldToLocal(vBase);
-      baseEl.object3D.getWorldQuaternion(qTmp);
-
-      var obj = cardEl.object3D;
-      obj.quaternion.copy(qTmp).invert().multiply(qCam);
-      obj.scale.setScalar(s);
-      vUp.set(0, 1, 0).applyQuaternion(obj.quaternion);
-      obj.position.copy(vBase).addScaledVector(vUp, (CARD_GAP + CARD_H / 2) * s);
-
-      vEnd.copy(vBase).addScaledVector(vUp, CARD_GAP * s);
-      var pos = lineGeo.attributes.position;
-      pos.setXYZ(0, vBase.x, vBase.y, vBase.z);
-      pos.setXYZ(1, vEnd.x, vEnd.y, vEnd.z);
-      pos.needsUpdate = true;
-      lineObj.visible = s > 0.3;
-    }
-
-    window.onFrame = function (dt) {
-      dt = Math.min(dt, 50);
-      if (modelReady && markerVisible && intro.t < INTRO_MS) {
-        intro.t = Math.min(INTRO_MS, intro.t + dt);
-        apply();
-      }
-      updateOverlay(dt);
-    };
-
-    document.addEventListener('model-fitted', function (e) {
-      halfH = e.detail.halfHeight;
-      topPoint = e.detail.top;
-      placeHotspot();
-      collectMaterials();
-      modelReady = true;
-      apply();
-    });
-
-    document.getElementById('reset-btn').addEventListener('click', function () {
-      yaw = 0; pitch = 0; zoom = 1;
-      startIntro();
-    });
-
-    // ── Chạm: chấm sáng bật/tắt thẻ, chạm thẻ để đọc đầy đủ ──────
-    function handleTap(x, y) {
-      if (panelOpen || !markerVisible || !hot || !hot.visible) return;
-      var cam = sceneEl.camera;
-      var cv = sceneEl.canvas;
-      if (!cam || !cv) return;
-      var r = cv.getBoundingClientRect();
-
-      hot.getWorldPosition(vHot);
-      vHot.project(cam);
-      var sx = r.left + (vHot.x * 0.5 + 0.5) * r.width;
-      var sy = r.top + (-vHot.y * 0.5 + 0.5) * r.height;
-      if (Math.hypot(x - sx, y - sy) <= HIT_PX) {
-        var now = Date.now();
-        if (now - lastToggleAt > 300) {
-          cardOpen = !cardOpen;
-          lastToggleAt = now;
-        }
-        return;
-      }
-
-      if (cardOpen && cardMesh.visible) {
-        ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
-        cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
-        ray.setFromCamera(ndc, cam);
-        if (ray.intersectObject(cardMesh, false).length) {
-          if (cardTruncated) setPanel(true);
-          else cardOpen = false;
-        }
-      }
-    }
-
-    // ── Kéo (cảm ứng + chuột) ────────────────────────────────────
-    var drag = null;
-    var lastTouchAt = 0;
-    var lastToggleAt = 0;
-
-    function recentTouch() { return Date.now() - lastTouchAt < 1000; }
-
-    function ignoreEvent(e) {
-      return panelOpen || (e.target && e.target.closest && e.target.closest('button'));
-    }
-
-    function dragStart(x, y, noTap) {
-      drag = { x: x, y: y, sx: x, sy: y, t: Date.now(), moved: 0, noTap: !!noTap, ax: 0, ay: 0, lock: null };
-    }
-
-    function dragMove(x, y) {
-      if (!drag) return;
-      var dx = x - drag.x;
-      var dy = y - drag.y;
-      drag.x = x;
-      drag.y = y;
-      drag.moved = Math.max(drag.moved, Math.hypot(x - drag.sx, y - drag.sy));
-
-      if (AXIS_LOCK && !drag.lock) {
-        drag.ax += dx;
-        drag.ay += dy;
-        if (Math.abs(drag.ax) < LOCK_PX && Math.abs(drag.ay) < LOCK_PX) return;
-        drag.lock = Math.abs(drag.ax) >= Math.abs(drag.ay) ? 'x' : 'y';
-        dx = drag.ax;
-        dy = drag.ay;
-      }
-
-      if (!AXIS_LOCK || drag.lock === 'x') yaw   += dx * SENS_ROT * YAW_DIR;
-      if (!AXIS_LOCK || drag.lock === 'y') pitch += dy * SENS_ROT * PITCH_DIR;
-      apply();
-    }
-
-    function dragEnd() {
-      var d = drag;
-      drag = null;
-      if (d && !d.noTap && d.moved < 18 && Date.now() - d.t < 600) handleTap(d.sx, d.sy);
-    }
-
-    function dragCancel() { drag = null; }
-
-    var lastPinch = null;
-
-    function pinchDist(t) {
-      var dx = t[0].clientX - t[1].clientX;
-      var dy = t[0].clientY - t[1].clientY;
-      return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    document.addEventListener('touchstart', function (e) {
-      lastTouchAt = Date.now();
-      if (ignoreEvent(e)) return;
-      if (e.touches.length === 1) {
-        lastPinch = null;
-        dragStart(e.touches[0].clientX, e.touches[0].clientY);
-      } else if (e.touches.length === 2) {
-        dragCancel();
-        lastPinch = pinchDist(e.touches);
-      }
-    }, { passive: true });
-
-    document.addEventListener('touchmove', function (e) {
-      lastTouchAt = Date.now();
-      if (panelOpen) return;
-      if (e.touches.length === 2) {
-        var d = pinchDist(e.touches);
-        if (lastPinch) {
-          zoom *= d / lastPinch;
-          apply();
-        }
-        lastPinch = d;
-        return;
-      }
-      if (e.touches.length === 1) {
-        dragMove(e.touches[0].clientX, e.touches[0].clientY);
-      }
-    }, { passive: true });
-
-    document.addEventListener('touchend', function (e) {
-      lastTouchAt = Date.now();
-      lastPinch = null;
-      if (e.touches.length === 1 && !panelOpen) {
-        dragStart(e.touches[0].clientX, e.touches[0].clientY, true);
-      } else if (e.touches.length === 0) {
-        dragEnd();
-      } else {
-        dragCancel();
-      }
-    }, { passive: true });
-
-    document.addEventListener('touchcancel', function () {
-      lastTouchAt = Date.now();
-      lastPinch = null;
-      dragCancel();
-    }, { passive: true });
-
-    document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
-
-    document.addEventListener('mousedown', function (e) {
-      if (recentTouch() || ignoreEvent(e)) return;
-      dragStart(e.clientX, e.clientY);
-    });
-    document.addEventListener('mousemove', function (e) { if (!recentTouch()) dragMove(e.clientX, e.clientY); });
-    document.addEventListener('mouseup', function () { if (!recentTouch()) dragEnd(); });
-
-    document.addEventListener('wheel', function (e) {
-      if (panelOpen) return;
-      zoom *= Math.exp(-e.deltaY * 0.001);
-      apply();
-    }, { passive: true });
-
-    function buildOverlay() {
-      buildCard();
-      buildHotspot();
-      apply();
-    }
-
-    if (sceneEl.hasLoaded) buildOverlay();
-    else sceneEl.addEventListener('loaded', buildOverlay);
-  </script>
+  <!-- Logic -->
+  <script src="js/main.js"></script>
 </body>
 </html>
