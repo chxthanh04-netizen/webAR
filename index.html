@@ -122,7 +122,8 @@
       renderer="logarithmicDepthBuffer: true; colorManagement: true;"
       arjs="sourceType: webcam;
             debugUIEnabled: false;
-            detectionMode: mono_and_matrix; matrixCodeType: 3x3;">
+            detectionMode: mono_and_matrix; matrixCodeType: 3x3;
+            patternRatio: 0.75;">
 
     <a-assets timeout="15000">
       <a-asset-item id="myModel" src="models/chanh_dien.glb"></a-asset-item>
@@ -187,13 +188,19 @@
     var SCALE_MAX    = 1.0;
     var SENSITIVITY  = 0.5;
 
-    // Dùng Quaternion để tránh gimbal lock — xoay luôn đúng hướng ngón tay
-    var rotQuat = new THREE.Quaternion();
+    // 3 trục hoàn toàn độc lập — KHÔNG giao thoa nhau
+    var rotY = 0;   // vuốt ngang  → xoay trái/phải
+    var rotX = 0;   // vuốt dọc   → ngửa/cúi
+    var rotZ = 0;   // twist 2 ngón → xoay tròn
 
     function applyTransform() {
       entity.setAttribute('scale', currentScale + ' ' + currentScale + ' ' + currentScale);
-      // Chuyển quaternion → euler để gán cho A-Frame
-      var euler = new THREE.Euler().setFromQuaternion(rotQuat, 'YXZ');
+      // Dựng quaternion từ 3 trục độc lập: Y trước, rồi X, rồi Z
+      var qY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), rotY * Math.PI/180);
+      var qX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), rotX * Math.PI/180);
+      var qZ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), rotZ * Math.PI/180);
+      var q = new THREE.Quaternion().copy(qY).multiply(qX).multiply(qZ);
+      var euler = new THREE.Euler().setFromQuaternion(q, 'YXZ');
       entity.setAttribute('rotation', {
         x: THREE.MathUtils.radToDeg(euler.x),
         y: THREE.MathUtils.radToDeg(euler.y),
@@ -201,25 +208,10 @@
       });
     }
 
-    // Xoay thêm theo trục WORLD (không bị lệch dù đã xoay trước đó)
-    function rotateByDelta(dx, dy) {
-      var angleY = dx * SENSITIVITY * (Math.PI / 180); // ngang → trục Y thế giới
-      var angleX = dy * SENSITIVITY * (Math.PI / 180); // dọc  → trục X thế giới
-      var qY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), angleY);
-      var qX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), angleX);
-      rotQuat.premultiply(qY).premultiply(qX);
-    }
-
-    function rotateByTwist(dAngleDeg) {
-      var angleZ = dAngleDeg * (Math.PI / 180);
-      var qZ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), angleZ);
-      rotQuat.premultiply(qZ);
-    }
-
     // Reset
     document.getElementById('reset-btn').addEventListener('click', function() {
       currentScale = 0.1;
-      rotQuat.set(0, 0, 0, 1); // identity
+      rotX = rotY = rotZ = 0;
       applyTransform();
     });
 
@@ -268,13 +260,13 @@
         }
         lastTouchDist = dist;
 
-        // ── TWIST: xoay trục Z (dùng quaternion) ─────────────────
+        // ── TWIST: chỉ cập nhật rotZ, không ảnh hưởng X/Y ───────
         var angle = getTouchAngle(e.touches);
         if (lastTouchAngle !== null) {
           var dAngle = angle - lastTouchAngle;
           if (dAngle >  180) dAngle -= 360;
           if (dAngle < -180) dAngle += 360;
-          rotateByTwist(-dAngle);
+          rotZ -= dAngle;   // chỉ rotZ thay đổi
         }
         lastTouchAngle = angle;
 
@@ -282,13 +274,12 @@
         lastTouchX = lastTouchY = null;
 
       } else if (e.touches.length === 1) {
-        // ── SWIPE 1 ngón: xoay X và Y (dùng quaternion) ──────────
+        // ── SWIPE 1 ngón: chỉ cập nhật rotX và rotY, không ảnh hưởng Z
         var x = e.touches[0].clientX;
         var y = e.touches[0].clientY;
         if (lastTouchX !== null && lastTouchY !== null) {
-          var dx = x - lastTouchX;
-          var dy = y - lastTouchY;
-          rotateByDelta(dx, dy);
+          rotY += (x - lastTouchX) * SENSITIVITY;   // ngang → Y
+          rotX += (y - lastTouchY) * SENSITIVITY;   // dọc   → X
           applyTransform();
         }
         lastTouchX    = x;
@@ -315,7 +306,8 @@
     document.addEventListener('mouseup', function() { mouseDown = false; });
     document.addEventListener('mousemove', function(e) {
       if (!mouseDown || !entity) return;
-      rotateByDelta(e.clientX - lastMouseX, e.clientY - lastMouseY);
+      rotY += (e.clientX - lastMouseX) * SENSITIVITY;
+      rotX += (e.clientY - lastMouseY) * SENSITIVITY;
       applyTransform();
       lastMouseX = e.clientX;
       lastMouseY = e.clientY;
