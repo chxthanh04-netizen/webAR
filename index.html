@@ -6,16 +6,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>AR 3D Viewer</title>
 
-  <!-- Load thư viện trước -->
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
 
   <script>
-    // Component: khi model tải xong thì
-    //   1) đo kích thước thật của model (đúng hệ tọa độ, không phụ thuộc marker đang hiện hay không)
-    //   2) co/giãn để cạnh lớn nhất = "size" (đơn vị: 1 = bằng chiều rộng marker)
-    //   3) dời TÂM của model về gốc (0,0,0) => xoay/zoom luôn quanh tâm, không bị văng ra khỏi marker
-    // Xong thì báo lại chiều cao (nửa) để trang nâng mô hình lên cho chân chạm mặt marker.
     AFRAME.registerComponent('auto-fit', {
       schema: { size: { type: 'number', default: 1 } },
 
@@ -29,15 +23,12 @@
         if (!mesh) return;
 
         var obj = el.object3D;
-        var parent = obj.parent;          // = #pivot
+        var parent = obj.parent;
 
-        // Đo ở kích thước gốc, tại gốc tọa độ
         obj.position.set(0, 0, 0);
         obj.scale.set(1, 1, 1);
         parent.updateMatrixWorld(true);
 
-        // Tính bounding box trong hệ tọa độ của #pivot
-        // (nhân với nghịch đảo ma trận của parent nên marker ở đâu cũng không ảnh hưởng)
         var inv = new THREE.Matrix4().copy(parent.matrixWorld).invert();
         var m = new THREE.Matrix4();
         var tmp = new THREE.Box3();
@@ -64,9 +55,15 @@
 
         var k = this.data.size / maxDim;
         obj.scale.setScalar(k);
-        obj.position.copy(center).multiplyScalar(-k);   // tâm mô hình -> gốc #pivot
+        obj.position.copy(center).multiplyScalar(-k);
 
         el.emit('model-fitted', { halfHeight: size.y * k / 2 });
+      }
+    });
+
+    AFRAME.registerComponent('frame-tick', {
+      tick: function (t, dt) {
+        if (window.onFrame) window.onFrame(dt);
       }
     });
   </script>
@@ -111,26 +108,71 @@
     .status-searching { background: rgba(255,193,7,0.3); color: #ffc107; border: 1px solid rgba(255,193,7,0.5); }
     .status-found { background: rgba(76,175,80,0.3); color: #4caf50; border: 1px solid rgba(76,175,80,0.5); }
 
-    /* Gesture controls UI */
-    #gesture-hint {
-      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-      z-index: 9998; display: none;
-      background: rgba(0,0,0,0.6); border-radius: 20px;
-      padding: 8px 16px; font-size: 12px; color: #fff;
-      white-space: nowrap; pointer-events: none;
-    }
     #reset-btn {
-      position: fixed; top: 56px; right: 16px; z-index: 9998;
+      position: fixed; top: 16px; right: 16px; z-index: 9998;
       display: none;
       background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25);
       color: #fff; border-radius: 50px; padding: 8px 16px;
       font-size: 13px; cursor: pointer;
     }
+
+    #info-btn {
+      position: fixed; top: 16px; left: 16px; z-index: 9998;
+      display: none;
+      background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25);
+      color: #fff; border-radius: 50%; width: 42px; height: 42px;
+      font-size: 20px; cursor: pointer; line-height: 42px; text-align: center;
+    }
+
+    #info-overlay {
+      position: fixed; inset: 0; z-index: 9998;
+      background: rgba(0,0,0,0.3);
+      display: none;
+    }
+
+    #info-panel {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999;
+      background: rgba(255,255,255,0.97);
+      border-radius: 20px 20px 0 0;
+      padding: 20px 20px 36px;
+      box-shadow: 0 -4px 30px rgba(0,0,0,0.3);
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+      max-height: 60vh; overflow-y: auto;
+      touch-action: pan-y;
+    }
+    #info-panel.open { transform: translateY(0); }
+    #info-panel .panel-handle {
+      width: 40px; height: 4px; border-radius: 2px;
+      background: #ccc; margin: 0 auto 16px;
+    }
+    #info-panel .panel-tag {
+      display: inline-block; font-size: 12px; font-weight: 700;
+      color: #c8860a; background: #fff4de;
+      border: 1px solid #f5c842; border-radius: 20px;
+      padding: 3px 10px; margin-bottom: 10px;
+    }
+    #info-panel h2 {
+      font-size: 20px; font-weight: 700; color: #1a1a1a;
+      margin-bottom: 10px; line-height: 1.3;
+    }
+    #info-panel .divider {
+      border: none; border-top: 1px solid #eee; margin: 12px 0;
+    }
+    #info-panel p {
+      font-size: 15px; color: #444; line-height: 1.7;
+      white-space: pre-line;
+    }
+    #info-panel .close-panel {
+      position: absolute; top: 16px; right: 16px;
+      background: #f0f0f0; border: none; border-radius: 50%;
+      width: 32px; height: 32px; font-size: 16px; cursor: pointer;
+      line-height: 32px; text-align: center; color: #555;
+    }
   </style>
 </head>
 <body>
 
-  <!-- Splash overlay - phủ lên AR scene bên dưới -->
   <div id="splash">
     <h1>📦 AR 3D Viewer</h1>
     <p>Nhấn nút bên dưới để bắt đầu. Hướng camera vào marker Chánh Điện để xem mô hình 3D.</p>
@@ -138,17 +180,25 @@
     <div class="platform-badge" id="platform-info"></div>
   </div>
 
-  <!-- HUD -->
   <div id="hud">
     <div class="hint">📌 Hướng camera vào marker Chánh Điện</div>
     <div class="status status-searching" id="marker-status">🔍 Đang tìm marker...</div>
   </div>
 
-  <!-- Gesture hint & Reset button -->
-  <div id="gesture-hint">↔ Vuốt ngang: xoay quanh &nbsp;|&nbsp; ↕ Vuốt dọc: nghiêng &nbsp;|&nbsp; 🤏 Pinch: zoom</div>
   <button id="reset-btn">↺ Reset</button>
+  <button id="info-btn">ℹ️</button>
 
-  <!-- AR Scene - luôn có trong DOM, splash chỉ phủ lên trên -->
+  <div id="info-overlay"></div>
+
+  <div id="info-panel">
+    <div class="panel-handle"></div>
+    <button class="close-panel" id="close-panel-btn">✕</button>
+    <div class="panel-tag" id="panel-tag"></div>
+    <h2 id="panel-title"></h2>
+    <hr class="divider">
+    <p id="panel-body"></p>
+  </div>
+
   <a-scene
       embedded
       vr-mode-ui="enabled: false"
@@ -172,19 +222,14 @@
               smoothTolerance="0.01" smoothThreshold="5"
               id="hiro-marker">
 
-      <!-- Lớp 1: #base — "mặt đất" của mô hình.
-           rotation="0 0 0"   : marker đặt NẰM trên bàn (mô hình đứng thẳng lên từ marker)
-           rotation="-90 0 0" : marker DỰNG ĐỨNG (cầm sách đứng, hoặc hiện trên màn hình) -->
-      <a-entity id="base" rotation="0 0 0">
+      <a-entity id="base" rotation="0 0 0" frame-tick>
 
-        <!-- Lớp 2: #pivot — vuốt/zoom tác động lên lớp này (xoay quanh TÂM mô hình) -->
         <a-entity id="pivot">
-
-          <!-- Lớp 3: #model — tự co về cỡ cố định và căn tâm.
-               size="1" nghĩa là cạnh lớn nhất = bằng chiều rộng marker. Muốn to hơn thì tăng (vd 1.5) -->
           <a-entity id="model" gltf-model="#myModel" auto-fit="size: 1"></a-entity>
-
         </a-entity>
+
+        <a-entity id="card" look-at="[camera]"></a-entity>
+
       </a-entity>
     </a-marker>
 
@@ -192,82 +237,324 @@
   </a-scene>
 
   <script>
-    // ── CẤU HÌNH (chỉnh ở đây) ───────────────────────────────────
-    var PITCH_MIN = -60;    // vuốt LÊN tối đa (mặt trước ngửa lên, thấy cửa rõ hơn)
-    var PITCH_MAX = 20;     // vuốt XUỐNG tối đa (cúi nhẹ, thấy mái hơn)
-    var SENS_ROT  = 0.4;    // độ nhạy xoay (độ / px)
-    var YAW_DIR   = 1;      // đổi thành -1 nếu vuốt ngang bị ngược chiều
-    var PITCH_DIR = 1;      // đổi thành -1 nếu vuốt dọc bị ngược chiều
-    var AXIS_LOCK = true;   // true: mỗi lần vuốt chỉ xoay 1 trục (ngang HOẶC dọc) — không bị lệch chéo
-    var LOCK_PX   = 8;      // vuốt quá ngần này px thì mới chốt trục
-    var ZOOM_MIN  = 0.4;    // zoom nhỏ nhất (so với cỡ ban đầu)
-    var ZOOM_MAX  = 3;      // zoom lớn nhất
+    // ── NỘI DUNG THÔNG TIN (sửa ở đây) ───────────────────────────
+    var INFO = {
+      tag:   'Di tích lịch sử',
+      title: 'Chánh Điện',
+      body:  'Chánh điện được thiết kế theo kiến trúc 8 mái,...'
+      // Muốn xuống dòng trong popup: dùng \n
+    };
 
-    // Platform detection
+    // ── CẤU HÌNH ─────────────────────────────────────────────────
+    var PITCH_MIN = -60;
+    var PITCH_MAX = 20;
+    var SENS_ROT  = 0.4;
+    var YAW_DIR   = 1;       // -1 nếu vuốt ngang bị ngược
+    var PITCH_DIR = 1;       // -1 nếu vuốt dọc bị ngược
+    var AXIS_LOCK = true;
+    var LOCK_PX   = 8;
+    var ZOOM_MIN  = 0.4;
+    var ZOOM_MAX  = 3;
+
+    // Hiệu ứng xuất hiện
+    var INTRO_MS        = 2200;   // thời gian hiệu ứng (mili-giây)
+    var INTRO_SPIN      = 180;    // góc xoay lúc đầu (độ); đổi dấu nếu muốn xoay ngược chiều
+    var INTRO_CLIP      = true;   // true: phần dưới mặt marker bị cắt (như trồi lên từ mặt giấy)
+    var INTRO_REPLAY    = true;   // true: mất marker rồi quét lại thì chạy lại hiệu ứng
+    var REPLAY_AFTER_MS = 2000;   // mất marker quá ngần này mới tính là "quét lại"
+
+    // Thẻ thông tin trong AR
+    var CARD_W   = 0.9;                         // bề rộng thẻ (1 = bề rộng marker)
+    var CARD_H   = CARD_W / 2;
+    var CARD_POS = { x: 0, y: 0.95, z: 0 };     // vị trí thẻ so với marker (y = độ cao)
+    var CARD_MAX_LINES = 4;                     // số dòng tối đa trên thẻ, dài hơn sẽ cắt "…"
+
+    var D2R = Math.PI / 180;
+
+    // ── Giao diện ────────────────────────────────────────────────
     var ua = navigator.userAgent;
-    var info = /iPhone|iPad|iPod/.test(ua) ? '🍎 iOS — Dùng Safari'
-             : /Android/.test(ua) ? '🤖 Android — Dùng Chrome'
-             : '💻 Desktop — Cần webcam';
-    document.getElementById('platform-info').textContent = info;
+    document.getElementById('platform-info').textContent =
+        /iPhone|iPad|iPod/.test(ua) ? '🍎 iOS — Dùng Safari'
+      : /Android/.test(ua) ? '🤖 Android — Dùng Chrome'
+      : '💻 Desktop — Cần webcam';
 
-    // Start button - chỉ ẩn splash, AR scene đã chạy bên dưới
+    document.getElementById('panel-tag').textContent = INFO.tag;
+    document.getElementById('panel-title').textContent = INFO.title;
+    document.getElementById('panel-body').textContent = INFO.body;
+
     document.getElementById('start-btn').addEventListener('click', function () {
       document.getElementById('splash').style.display = 'none';
       document.getElementById('hud').style.display = 'block';
-      document.getElementById('gesture-hint').style.display = 'block';
       document.getElementById('reset-btn').style.display = 'block';
+      document.getElementById('info-btn').style.display = 'block';
     });
 
-    // Marker events
+    var panel = document.getElementById('info-panel');
+    var overlay = document.getElementById('info-overlay');
+    var panelOpen = false;
+
+    function setPanel(open) {
+      panelOpen = open;
+      panel.classList.toggle('open', open);
+      overlay.style.display = open ? 'block' : 'none';
+    }
+
+    document.getElementById('info-btn').addEventListener('click', function () { setPanel(!panelOpen); });
+    document.getElementById('close-panel-btn').addEventListener('click', function () { setPanel(false); });
+    overlay.addEventListener('click', function () { setPanel(false); });
+
+    // ── Marker ───────────────────────────────────────────────────
     var marker = document.getElementById('hiro-marker');
     var statusEl = document.getElementById('marker-status');
+    var markerVisible = false;
+    var lostAt = 0;
+    var hasPlayed = false;
+
     marker.addEventListener('markerFound', function () {
+      markerVisible = true;
       statusEl.textContent = '✅ Marker đã nhận diện!';
       statusEl.className = 'status status-found';
+      if (!hasPlayed || (INTRO_REPLAY && Date.now() - lostAt > REPLAY_AFTER_MS)) startIntro();
     });
     marker.addEventListener('markerLost', function () {
+      markerVisible = false;
+      lostAt = Date.now();
       statusEl.textContent = '🔍 Đang tìm marker...';
       statusEl.className = 'status status-searching';
     });
 
-    // ── GESTURE CONTROLS ─────────────────────────────────────────
-    // Vuốt ngang  → yaw   : xoay quanh trục ĐỨNG của mô hình (nền luôn ở dưới chân)
-    // Vuốt dọc    → pitch : nghiêng tới/lui, có giới hạn nên mô hình không bao giờ ngã nằm
-    // Pinch 2 ngón→ zoom  : nhân theo TỈ LỆ khoảng cách 2 ngón (mượt, không nhảy cỡ)
-    var pivot = document.getElementById('pivot');
+    // ── Thẻ thông tin trong AR (vẽ bằng canvas để hiển thị tiếng Việt đúng dấu) ──
+    var sceneEl = document.querySelector('a-scene');
+    var baseEl = document.getElementById('base');
+    var cardEl = document.getElementById('card');
+    var cardMesh = null, cardMat = null, lineObj = null, lineGeo = null;
 
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function wrapLines(ctx, text, maxW) {
+      var words = text.replace(/\s+/g, ' ').trim().split(' ');
+      var lines = [], line = '';
+      words.forEach(function (w) {
+        var t = line ? line + ' ' + w : w;
+        if (line && ctx.measureText(t).width > maxW) { lines.push(line); line = w; }
+        else line = t;
+      });
+      if (line) lines.push(line);
+      return lines;
+    }
+
+    function buildCard() {
+      var W = 1024, H = 512, PAD = 48;
+      var FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      var c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      var ctx = c.getContext('2d');
+
+      ctx.fillStyle = 'rgba(255,255,255,0.97)';
+      roundRect(ctx, 0, 0, W, H, 44);
+      ctx.fill();
+
+      ctx.font = '700 24px ' + FONT;
+      var tw = ctx.measureText(INFO.tag).width;
+      roundRect(ctx, PAD, 38, tw + 36, 40, 20);
+      ctx.fillStyle = '#fff4de'; ctx.fill();
+      ctx.strokeStyle = '#f5c842'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#c8860a';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(INFO.tag, PAD + 18, 59);
+
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#1a1a1a';
+      ctx.font = '700 62px ' + FONT;
+      ctx.fillText(INFO.title, PAD, 150);
+
+      ctx.fillStyle = '#e6e6e6';
+      ctx.fillRect(PAD, 176, W - 2 * PAD, 2);
+
+      ctx.font = '400 30px ' + FONT;
+      ctx.fillStyle = '#444';
+      var maxW = W - 2 * PAD;
+      var lines = wrapLines(ctx, INFO.body, maxW);
+      if (lines.length > CARD_MAX_LINES) {
+        lines = lines.slice(0, CARD_MAX_LINES);
+        var last = lines[CARD_MAX_LINES - 1];
+        while (last && ctx.measureText(last + '…').width > maxW) last = last.slice(0, -1);
+        lines[CARD_MAX_LINES - 1] = last.replace(/[\s,.;:]+$/, '') + '…';
+      }
+      lines.forEach(function (l, i) { ctx.fillText(l, PAD, 228 + i * 46); });
+
+      ctx.font = '600 26px ' + FONT;
+      ctx.fillStyle = '#0077b6';
+      ctx.textAlign = 'right';
+      ctx.fillText('Chạm để xem thêm ›', W - PAD, 478);
+
+      var tex = new THREE.CanvasTexture(c);
+      if (THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+      tex.anisotropy = 4;
+
+      cardMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, toneMapped: false });
+      cardMesh = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H), cardMat);
+      cardMesh.visible = false;
+      cardEl.setObject3D('mesh', cardMesh);
+      cardEl.object3D.position.set(CARD_POS.x, CARD_POS.y, CARD_POS.z);
+
+      lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+      lineObj = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0x00b4d8 }));
+      lineObj.frustumCulled = false;
+      lineObj.visible = false;
+      baseEl.object3D.add(lineObj);
+
+      apply();
+    }
+
+    // ── Mô hình: xoay / zoom / hiệu ứng xuất hiện ────────────────
+    var pivot = document.getElementById('pivot');
     var yaw = 0, pitch = 0, zoom = 1;
-    var halfH = 0;   // nửa chiều cao mô hình (đơn vị marker), do auto-fit báo về
+    var halfH = 0;
+    var modelReady = false;
+    var mats = [];
+    var clipOn = false;
+    var clipPlane = new THREE.Plane();
+    var intro = { t: INTRO_MS };
 
     function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+    function startIntro() {
+      hasPlayed = true;
+      intro.t = 0;
+      apply();
+    }
+
+    function collectMaterials() {
+      var mesh = document.getElementById('model').getObject3D('mesh');
+      mats = [];
+      if (!mesh) return;
+      mesh.traverse(function (o) {
+        if (!o.isMesh) return;
+        (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) {
+          if (!m) return;
+          if (mats.every(function (e) { return e.m !== m; })) {
+            mats.push({ m: m, transparent: m.transparent, opacity: m.opacity });
+          }
+        });
+      });
+    }
+
+    function setClip(on) {
+      if (on === clipOn) return;
+      clipOn = on;
+      if (on) sceneEl.renderer.localClippingEnabled = true;
+      mats.forEach(function (e) {
+        e.m.clippingPlanes = on ? [clipPlane] : null;
+        e.m.needsUpdate = true;
+      });
+    }
+
+    function updateClipPlane() {
+      var o = baseEl.object3D;
+      o.updateWorldMatrix(true, false);
+      var n = new THREE.Vector3(0, 1, 0).transformDirection(o.matrixWorld);
+      var p = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
+      clipPlane.setFromNormalAndCoplanarPoint(n, p);
+    }
+
+    function setModelAlpha(a) {
+      mats.forEach(function (e) {
+        var t = a < 1 ? true : e.transparent;
+        if (e.m.transparent !== t) { e.m.transparent = t; e.m.needsUpdate = true; }
+        e.m.opacity = a < 1 ? e.opacity * a : e.opacity;
+      });
+    }
+
+    function updateVisuals(prog) {
+      if (modelReady) {
+        var animating = prog < 1;
+        setClip(INTRO_CLIP && animating);
+        if (clipOn) updateClipPlane();
+        setModelAlpha(clamp(prog / 0.6, 0, 1));
+      }
+      if (cardMesh) {
+        var ca = clamp((prog - 0.85) / 0.15, 0, 1);
+        cardMat.opacity = ca;
+        cardMesh.visible = ca > 0.01;
+      }
+      if (lineObj) {
+        var top = 2 * halfH * zoom;
+        var bottom = CARD_POS.y - CARD_H / 2;
+        var p = lineGeo.attributes.position;
+        p.setXYZ(0, 0, top, 0);
+        p.setXYZ(1, CARD_POS.x, bottom, CARD_POS.z);
+        p.needsUpdate = true;
+        lineObj.visible = cardMesh.visible && (bottom - top) > 0.03;
+      }
+    }
 
     function apply() {
       pitch = clamp(pitch, PITCH_MIN, PITCH_MAX);
       zoom  = clamp(zoom, ZOOM_MIN, ZOOM_MAX);
 
+      var prog = clamp(intro.t / INTRO_MS, 0, 1);
+      var ease = 1 - Math.pow(1 - prog, 3);
+
       var o = pivot.object3D;
-      // Euler 'XYZ': xoay yaw (quanh trục đứng của mô hình) trước, rồi mới nghiêng pitch
-      o.rotation.set(pitch * Math.PI / 180, yaw * Math.PI / 180, 0);
+      o.rotation.set(pitch * D2R, (yaw + INTRO_SPIN * (1 - ease)) * D2R, 0);
       o.scale.setScalar(zoom);
-      // Nâng tâm lên nửa chiều cao => chân mô hình chạm mặt marker, và zoom thì chân vẫn chạm
-      o.position.set(0, halfH * zoom, 0);
+      o.position.set(0, halfH * zoom - (2 * halfH * zoom + 0.08) * (1 - ease), 0);
+
+      updateVisuals(prog);
     }
+
+    window.onFrame = function (dt) {
+      if (!modelReady || !markerVisible || intro.t >= INTRO_MS) return;
+      intro.t = Math.min(INTRO_MS, intro.t + Math.min(dt, 50));
+      apply();
+    };
 
     document.addEventListener('model-fitted', function (e) {
       halfH = e.detail.halfHeight;
+      collectMaterials();
+      modelReady = true;
       apply();
     });
 
     document.getElementById('reset-btn').addEventListener('click', function () {
       yaw = 0; pitch = 0; zoom = 1;
-      apply();
+      startIntro();
     });
 
-    // ── Kéo (dùng chung cho cảm ứng và chuột) ──
+    // ── Chạm vào thẻ trong AR → mở popup ─────────────────────────
+    var ray = new THREE.Raycaster();
+    var ndc = new THREE.Vector2();
+
+    function handleTap(x, y) {
+      if (panelOpen || !markerVisible || !cardMesh || !cardMesh.visible) return;
+      var cam = sceneEl.camera;
+      var cv = sceneEl.canvas;
+      if (!cam || !cv) return;
+      var r = cv.getBoundingClientRect();
+      ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+      cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+      ray.setFromCamera(ndc, cam);
+      if (ray.intersectObject(cardMesh, false).length) setPanel(true);
+    }
+
+    // ── Kéo (cảm ứng + chuột) ────────────────────────────────────
     var drag = null;
 
-    function dragStart(x, y) {
-      drag = { x: x, y: y, ax: 0, ay: 0, lock: null };
+    function ignoreEvent(e) {
+      return panelOpen || (e.target && e.target.closest && e.target.closest('button'));
+    }
+
+    function dragStart(x, y, noTap) {
+      drag = { x: x, y: y, sx: x, sy: y, t: Date.now(), moved: 0, noTap: !!noTap, ax: 0, ay: 0, lock: null };
     }
 
     function dragMove(x, y) {
@@ -276,13 +563,14 @@
       var dy = y - drag.y;
       drag.x = x;
       drag.y = y;
+      drag.moved = Math.max(drag.moved, Math.hypot(x - drag.sx, y - drag.sy));
 
       if (AXIS_LOCK && !drag.lock) {
         drag.ax += dx;
         drag.ay += dy;
         if (Math.abs(drag.ax) < LOCK_PX && Math.abs(drag.ay) < LOCK_PX) return;
         drag.lock = Math.abs(drag.ax) >= Math.abs(drag.ay) ? 'x' : 'y';
-        dx = drag.ax;   // áp dụng phần đã vuốt từ đầu
+        dx = drag.ax;
         dy = drag.ay;
       }
 
@@ -291,9 +579,14 @@
       apply();
     }
 
-    function dragEnd() { drag = null; }
+    function dragEnd() {
+      var d = drag;
+      drag = null;
+      if (d && !d.noTap && d.moved < 10 && Date.now() - d.t < 400) handleTap(d.sx, d.sy);
+    }
 
-    // ── TOUCH ──
+    function dragCancel() { drag = null; }
+
     var lastPinch = null;
 
     function pinchDist(t) {
@@ -303,16 +596,18 @@
     }
 
     document.addEventListener('touchstart', function (e) {
+      if (ignoreEvent(e)) return;
       if (e.touches.length === 1) {
         lastPinch = null;
         dragStart(e.touches[0].clientX, e.touches[0].clientY);
       } else if (e.touches.length === 2) {
-        dragEnd();
+        dragCancel();
         lastPinch = pinchDist(e.touches);
       }
     }, { passive: true });
 
     document.addEventListener('touchmove', function (e) {
+      if (panelOpen) return;
       if (e.touches.length === 2) {
         var d = pinchDist(e.touches);
         if (lastPinch) {
@@ -329,31 +624,37 @@
 
     document.addEventListener('touchend', function (e) {
       lastPinch = null;
-      if (e.touches.length === 1) {
-        // nhấc bớt 1 ngón: tiếp tục kéo bằng ngón còn lại, không bị giật
-        dragStart(e.touches[0].clientX, e.touches[0].clientY);
-      } else {
+      if (e.touches.length === 1 && !panelOpen) {
+        dragStart(e.touches[0].clientX, e.touches[0].clientY, true);
+      } else if (e.touches.length === 0) {
         dragEnd();
+      } else {
+        dragCancel();
       }
     }, { passive: true });
 
     document.addEventListener('touchcancel', function () {
       lastPinch = null;
-      dragEnd();
+      dragCancel();
     }, { passive: true });
 
-    // Chặn iOS tự zoom trang khi pinch
     document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
 
-    // ── MOUSE (desktop) ──
-    document.addEventListener('mousedown', function (e) { dragStart(e.clientX, e.clientY); });
+    document.addEventListener('mousedown', function (e) {
+      if (ignoreEvent(e)) return;
+      dragStart(e.clientX, e.clientY);
+    });
     document.addEventListener('mousemove', function (e) { dragMove(e.clientX, e.clientY); });
     document.addEventListener('mouseup', dragEnd);
 
     document.addEventListener('wheel', function (e) {
+      if (panelOpen) return;
       zoom *= Math.exp(-e.deltaY * 0.001);
       apply();
     }, { passive: true });
+
+    if (sceneEl.hasLoaded) buildCard();
+    else sceneEl.addEventListener('loaded', buildCard);
   </script>
 </body>
 </html>
