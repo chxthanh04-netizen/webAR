@@ -295,7 +295,7 @@
     var HOTSPOT_SIZE   = 0.2;                    // cỡ chấm + vòng lan toả (1 = bề rộng marker)
     var HOTSPOT_OFFSET = { x: 0, y: 0.02, z: 0 };// dịch thêm so với chóp mái (+y = lên)
     var HOTSPOT_POS    = null;                   // null = tự tìm chóp mái; hoặc { x: 0, y: 0.3, z: 0 } để tự chọn điểm (gốc = tâm mô hình)
-    var HIT_PX         = 44;                     // vùng chạm quanh chấm (pixel)
+    var HIT_PX         = 52;                     // vùng chạm quanh chấm (pixel)
 
     // Thẻ thông tin trong AR
     var CARD_W         = 0.9;                    // bề rộng thẻ (1 = bề rộng marker)
@@ -709,7 +709,11 @@
       var sx = r.left + (vHot.x * 0.5 + 0.5) * r.width;
       var sy = r.top + (-vHot.y * 0.5 + 0.5) * r.height;
       if (Math.hypot(x - sx, y - sy) <= HIT_PX) {
-        cardOpen = !cardOpen;
+        var now = Date.now();
+        if (now - lastToggleAt > 300) {
+          cardOpen = !cardOpen;
+          lastToggleAt = now;
+        }
         return;
       }
 
@@ -726,6 +730,10 @@
 
     // ── Kéo (cảm ứng + chuột) ────────────────────────────────────
     var drag = null;
+    var lastTouchAt = 0;
+    var lastToggleAt = 0;
+
+    function recentTouch() { return Date.now() - lastTouchAt < 1000; }
 
     function ignoreEvent(e) {
       return panelOpen || (e.target && e.target.closest && e.target.closest('button'));
@@ -760,7 +768,7 @@
     function dragEnd() {
       var d = drag;
       drag = null;
-      if (d && !d.noTap && d.moved < 10 && Date.now() - d.t < 400) handleTap(d.sx, d.sy);
+      if (d && !d.noTap && d.moved < 18 && Date.now() - d.t < 600) handleTap(d.sx, d.sy);
     }
 
     function dragCancel() { drag = null; }
@@ -774,6 +782,7 @@
     }
 
     document.addEventListener('touchstart', function (e) {
+      lastTouchAt = Date.now();
       if (ignoreEvent(e)) return;
       if (e.touches.length === 1) {
         lastPinch = null;
@@ -785,6 +794,7 @@
     }, { passive: true });
 
     document.addEventListener('touchmove', function (e) {
+      lastTouchAt = Date.now();
       if (panelOpen) return;
       if (e.touches.length === 2) {
         var d = pinchDist(e.touches);
@@ -801,6 +811,7 @@
     }, { passive: true });
 
     document.addEventListener('touchend', function (e) {
+      lastTouchAt = Date.now();
       lastPinch = null;
       if (e.touches.length === 1 && !panelOpen) {
         dragStart(e.touches[0].clientX, e.touches[0].clientY, true);
@@ -812,6 +823,7 @@
     }, { passive: true });
 
     document.addEventListener('touchcancel', function () {
+      lastTouchAt = Date.now();
       lastPinch = null;
       dragCancel();
     }, { passive: true });
@@ -819,11 +831,11 @@
     document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
 
     document.addEventListener('mousedown', function (e) {
-      if (ignoreEvent(e)) return;
+      if (recentTouch() || ignoreEvent(e)) return;
       dragStart(e.clientX, e.clientY);
     });
-    document.addEventListener('mousemove', function (e) { dragMove(e.clientX, e.clientY); });
-    document.addEventListener('mouseup', dragEnd);
+    document.addEventListener('mousemove', function (e) { if (!recentTouch()) dragMove(e.clientX, e.clientY); });
+    document.addEventListener('mouseup', function () { if (!recentTouch()) dragEnd(); });
 
     document.addEventListener('wheel', function (e) {
       if (panelOpen) return;
