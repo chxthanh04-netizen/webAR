@@ -228,7 +228,7 @@
           <a-entity id="model" gltf-model="#myModel" auto-fit="size: 1"></a-entity>
         </a-entity>
 
-        <a-entity id="card" look-at="[camera]"></a-entity>
+        <a-entity id="card"></a-entity>
 
       </a-entity>
     </a-marker>
@@ -266,7 +266,8 @@
     // Thẻ thông tin trong AR
     var CARD_W   = 0.9;                         // bề rộng thẻ (1 = bề rộng marker)
     var CARD_H   = CARD_W / 2;
-    var CARD_POS = { x: 0, y: 0.95, z: 0 };     // vị trí thẻ so với marker (y = độ cao)
+    var CARD_GAP = 0.08;                        // khoảng cách từ đỉnh mô hình đến mép dưới thẻ (nhỏ hơn = gần hơn)
+    var CARD_X   = 0;                           // lệch trái/phải so với tâm mô hình
     var CARD_MAX_LINES = 4;                     // số dòng tối đa trên thẻ, dài hơn sẽ cắt "…"
 
     var D2R = Math.PI / 180;
@@ -404,7 +405,6 @@
       cardMesh = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H), cardMat);
       cardMesh.visible = false;
       cardEl.setObject3D('mesh', cardMesh);
-      cardEl.object3D.position.set(CARD_POS.x, CARD_POS.y, CARD_POS.z);
 
       lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
       lineObj = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0x00b4d8 }));
@@ -485,16 +485,32 @@
         var ca = clamp((prog - 0.85) / 0.15, 0, 1);
         cardMat.opacity = ca;
         cardMesh.visible = ca > 0.01;
+        cardEl.object3D.position.set(CARD_X, 2 * halfH + CARD_GAP + CARD_H / 2, 0);
       }
-      if (lineObj) {
-        var top = 2 * halfH * zoom;
-        var bottom = CARD_POS.y - CARD_H / 2;
-        var p = lineGeo.attributes.position;
-        p.setXYZ(0, 0, top, 0);
-        p.setXYZ(1, CARD_POS.x, bottom, CARD_POS.z);
-        p.needsUpdate = true;
-        lineObj.visible = cardMesh.visible && (bottom - top) > 0.03;
-      }
+    }
+
+    var qCam = new THREE.Quaternion();
+    var qParent = new THREE.Quaternion();
+    var vEnd = new THREE.Vector3();
+
+    function faceCamera() {
+      if (!cardMesh) return;
+      if (!markerVisible || !cardMesh.visible) { lineObj.visible = false; return; }
+      var cam = sceneEl.camera;
+      if (!cam) return;
+
+      var obj = cardEl.object3D;
+      cam.getWorldQuaternion(qCam);
+      obj.parent.getWorldQuaternion(qParent);
+      obj.quaternion.copy(qParent).invert().multiply(qCam);
+
+      var top = 2 * halfH * zoom;
+      vEnd.set(0, -CARD_H / 2, 0).applyQuaternion(obj.quaternion).add(obj.position);
+      var p = lineGeo.attributes.position;
+      p.setXYZ(0, 0, top, 0);
+      p.setXYZ(1, vEnd.x, vEnd.y, vEnd.z);
+      p.needsUpdate = true;
+      lineObj.visible = (vEnd.y - top) > 0.03;
     }
 
     function apply() {
@@ -513,9 +529,11 @@
     }
 
     window.onFrame = function (dt) {
-      if (!modelReady || !markerVisible || intro.t >= INTRO_MS) return;
-      intro.t = Math.min(INTRO_MS, intro.t + Math.min(dt, 50));
-      apply();
+      if (modelReady && markerVisible && intro.t < INTRO_MS) {
+        intro.t = Math.min(INTRO_MS, intro.t + Math.min(dt, 50));
+        apply();
+      }
+      faceCamera();
     };
 
     document.addEventListener('model-fitted', function (e) {
