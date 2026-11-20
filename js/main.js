@@ -487,7 +487,7 @@ function createViewer(cfg, onFirstSettled) {
       lineObj.visible  = false;
       if (calibDot) calibDot.visible = false;
     }
-    modelEl.setAttribute('gltf-model', 'url(' + stages[idx].model + ')');
+    modelEl.setAttribute('gltf-model', stages[idx].model);
   }
 
   document.addEventListener('model-fitted', function (e) {
