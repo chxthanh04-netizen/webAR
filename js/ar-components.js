@@ -11,6 +11,56 @@ AFRAME.registerComponent('frame-tick', {
   }
 });
 
+AFRAME.registerComponent('wait-for-patterns', {
+  init: function () {
+    var count = this.el.querySelectorAll('a-marker[type="pattern"]').length;
+    this.status = 'ready';
+    if (!count || !this.el.hasAttribute('arjs')) return;
+
+    this.status = 'loading';
+    var gate = this;
+    this.el.addEventListener('renderstart', function () {
+      // Hệ thống AR.js tạo session trong cùng sự kiện renderstart.
+      Promise.resolve().then(function () { gate.waitForRegistration(count); });
+    }, { once: true });
+  },
+
+  waitForRegistration: function (count) {
+    var system = this.el.systems.arjs;
+    var context = system && system._arSession && system._arSession.arContext;
+    if (!context) { this.status = 'error'; return; }
+
+    // AR.js 3.4.5 đăng ký từng mẫu sau khi nạp tệp .patt. Tạm dừng
+    // xử lý ảnh camera để các mẫu đã nạp không nhận nhầm mẫu còn thiếu.
+    var gate = this;
+    var update = context.update;
+    context.update = function () { return false; };
+
+    function observeRegistration() {
+      context.removeEventListener('initialized', observeRegistration);
+      var controller = context.arController;
+      var track = controller.trackPatternMarkerId;
+      var registered = new Set();
+      var timeout = setTimeout(function () { gate.status = 'error'; }, 15000);
+
+      controller.trackPatternMarkerId = function (id, size) {
+        var result = track.apply(this, arguments);
+        if (id >= 0 && size !== undefined) registered.add(id);
+        if (registered.size === count) {
+          clearTimeout(timeout);
+          controller.trackPatternMarkerId = track;
+          context.update = update;
+          gate.status = 'ready';
+        }
+        return result;
+      };
+    }
+
+    if (context.arController) observeRegistration();
+    else context.addEventListener('initialized', observeRegistration);
+  }
+});
+
 AFRAME.registerComponent('auto-fit', {
   schema: { size: { type: 'number', default: 1 } },
 

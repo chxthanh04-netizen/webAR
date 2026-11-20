@@ -752,9 +752,16 @@ function updateUI() {
   var cur  = current;
   var now  = Date.now();
   var anyVisible = viewers.some(function (v) { return v.markerVisible; });
+  var patternGate = sceneEl.components['wait-for-patterns'];
 
   var text, cls;
-  if (cur && cur.phase === 'error') {
+  if (patternGate && patternGate.status === 'loading') {
+    text = '⏳ Đang tải bộ marker…';
+    cls  = 'status status-searching';
+  } else if (patternGate && patternGate.status === 'error') {
+    text = '⚠️ Chưa tải đủ bộ marker. Kiểm tra kết nối hoặc tải lại trang.';
+    cls  = 'status status-error';
+  } else if (cur && cur.phase === 'error') {
     text = '⚠️ Không tải được ' + cur.error;
     cls  = 'status status-error';
   } else if (cur && cur.markerVisible && cur.phase === 'loading') {
