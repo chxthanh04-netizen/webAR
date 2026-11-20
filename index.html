@@ -36,6 +36,10 @@
   <button id="reset-btn">↺ Reset</button>
   <button id="info-btn">ℹ️</button>
   <button id="back-btn"></button>
+  <div id="history-topics" role="group" aria-label="Lịch sử Phật hoàng Trần Nhân Tông" hidden>
+    <button type="button" data-topic="thienPhai" aria-controls="info-panel">Thiền<br>phái</button>
+    <button type="button" data-topic="vuaTran" aria-controls="info-panel" aria-label="Vua Trần Nhân Tông">Vua<br>Trần</button>
+  </div>
 
   <!-- Chế độ lấy toạ độ chấm sáng: mở trang với ?calib=1 -->
   <div id="calib-box"></div>
@@ -49,6 +53,7 @@
     <h2 id="panel-title"></h2>
     <hr class="divider">
     <p id="panel-body"></p>
+    <a id="panel-source" target="_blank" rel="noopener noreferrer" hidden>Đọc nguồn tham khảo</a>
   </div>
 
   <!-- AR Scene -->
@@ -90,6 +95,19 @@
           <a-entity id="lau-trong-model" auto-fit="size: 1"></a-entity>
         </a-entity>
         <a-entity id="lau-trong-card"></a-entity>
+      </a-entity>
+    </a-marker>
+
+    <!-- Marker 3: Tượng Phật hoàng Trần Nhân Tông -->
+    <a-marker type="pattern" url="marker/pattern_tuong.patt"
+              smooth="true" smooth-count="10"
+              smooth-tolerance="0.01" smooth-threshold="5"
+              id="marker-tuong-phat-hoang">
+      <a-entity id="tuong-phat-hoang-base">
+        <a-entity id="tuong-phat-hoang-pivot">
+          <a-entity id="tuong-phat-hoang-model" auto-fit="size: 1"></a-entity>
+        </a-entity>
+        <a-entity id="tuong-phat-hoang-card"></a-entity>
       </a-entity>
     </a-marker>
 

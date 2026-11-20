@@ -50,8 +50,33 @@ var SCENES = [
         body:  'Ngói cánh sen có hình dáng,...'
       }
     ]
+  },
+  {
+    id: 'tuong-phat-hoang',
+    loadOnSight: true,
+    stages: [
+      {
+        id: 'tuong_phat_hoang',
+        model: 'models/tuong_phat_hoang.glb',
+        title: 'Tượng Phật hoàng',
+        body: 'Tượng khắc họa Trần Nhân Tông (1258–1308), vị vua thứ ba của nhà Trần và Sơ tổ Thiền phái Trúc Lâm Yên Tử.'
+      }
+    ]
   }
 ];
+
+var HISTORY_TOPICS = {
+  thienPhai: {
+    title: 'Thiền phái Trúc Lâm Yên Tử',
+    body: 'Thiền phái Trúc Lâm hình thành vào thời Trần. Năm 1299, Trần Nhân Tông lên núi Yên Tử tu hành. Ông được tôn là Sơ tổ của thiền phái. Sau ông, Pháp Loa và Huyền Quang tiếp nối, hợp thành Trúc Lâm Tam tổ.\n\nTư tưởng Trúc Lâm gắn việc tu tập với đời sống hằng ngày. Tinh thần ấy được thể hiện trong tác phẩm Cư trần lạc đạo phú của Trần Nhân Tông.',
+    source: 'https://phatgiao.org.vn/luoc-su-truc-lam-tam-to-d47053.html'
+  },
+  vuaTran: {
+    title: 'Vua Trần Nhân Tông',
+    body: 'Trần Nhân Tông (1258–1308), tên húy Trần Khâm, lên ngôi năm 1278. Dưới thời ông, quân dân Đại Việt đánh bại hai cuộc xâm lược của quân Nguyên vào năm 1285 và giai đoạn 1287–1288.\n\nNăm 1293, ông nhường ngôi cho con là Trần Anh Tông và trở thành Thái thượng hoàng. Về sau, ông xuất gia tu hành tại Yên Tử và được biết đến với danh xưng Phật hoàng.',
+    source: 'https://baotanglichsu.vn/vi/Articles/1508/50847/phat-hoang-tran-nhan-tong-va-nhung-tu-tuong-ven-nguyen-tinh-thoi-su.html'
+  }
+};
 
 // ── CẤU HÌNH ─────────────────────────────────────────────────
 var PITCH_MIN = -60;
@@ -142,10 +167,12 @@ $('platform-info').textContent =
   : /Android/.test(ua)          ? '🤖 Android — Dùng Chrome'
   : '💻 Desktop — Cần webcam';
 
-var panel     = $('info-panel');
-var overlayEl = $('info-overlay');
-var panelOpen = false;
-var started   = false;
+var panel         = $('info-panel');
+var overlayEl     = $('info-overlay');
+var panelSource   = $('panel-source');
+var historyTopics = $('history-topics');
+var panelOpen     = false;
+var started       = false;
 
 function setPanel(open) {
   panelOpen = open;
@@ -153,13 +180,12 @@ function setPanel(open) {
   overlayEl.style.display = open ? 'block' : 'none';
 }
 
-function fillPanel(stage) {
-  $('panel-title').textContent = stage.title;
-  $('panel-body').textContent  = stage.body;
-}
-
-function openPanelFor(v) {
-  fillPanel(v.stage());
+function openPanel(content) {
+  $('panel-title').textContent = content.title;
+  $('panel-body').textContent  = content.body;
+  panelSource.hidden = !content.source;
+  if (content.source) panelSource.href = content.source;
+  panel.scrollTop = 0;
   setPanel(true);
 }
 
@@ -173,7 +199,12 @@ $('start-btn').addEventListener('click', function () {
 $('info-btn').addEventListener('click', function () {
   if (!current) return;
   if (panelOpen) { setPanel(false); return; }
-  openPanelFor(current);
+  openPanel(current.stage());
+});
+historyTopics.addEventListener('click', function (e) {
+  var button = e.target.closest('button[data-topic]');
+  var viewer = target();
+  if (button && viewer && viewer.id === 'tuong-phat-hoang') openPanel(HISTORY_TOPICS[button.dataset.topic]);
 });
 $('close-panel-btn').addEventListener('click', function () { setPanel(false); });
 overlayEl.addEventListener('click', function () { setPanel(false); });
@@ -197,9 +228,10 @@ function createViewer(cfg, onFirstSettled) {
   var cardEl   = $(cfg.id + '-card');
 
   var v = {
+    id: cfg.id,
     markerVisible: false, lostAt: 0,
     stageIdx: 0, count: stages.length,
-    phase: 'loading',     // loading | intro | idle | outro | error
+    phase: cfg.loadOnSight ? 'waiting' : 'loading',
     error: ''
   };
 
@@ -220,7 +252,7 @@ function createViewer(cfg, onFirstSettled) {
   v.prevTitle = function () { return v.stageIdx > 0 ? stages[v.stageIdx - 1].title : ''; };
 
   function settleFirst() {
-    if (firstSettled) return;
+    if (firstSettled || cfg.loadOnSight) return;
     firstSettled = true;
     onFirstSettled();
   }
@@ -229,7 +261,11 @@ function createViewer(cfg, onFirstSettled) {
   markerEl.addEventListener('markerFound', function () {
     v.markerVisible = true;
     current = v;
-    if (!hasPlayed || (INTRO_REPLAY && Date.now() - v.lostAt > REPLAY_AFTER_MS)) startIntro();
+    if (v.phase === 'waiting') {
+      if (overlayBuilt) loadStage(0);
+    } else if (!hasPlayed || (INTRO_REPLAY && Date.now() - v.lostAt > REPLAY_AFTER_MS)) {
+      startIntro();
+    }
   });
   markerEl.addEventListener('markerLost', function () {
     v.markerVisible = false;
@@ -652,7 +688,7 @@ function createViewer(cfg, onFirstSettled) {
 
     // 2) Thẻ đang mở: chạm thẻ → mở bảng đầy đủ (nếu bị cắt) hoặc đóng thẻ
     if (cardOpen && cardMesh.visible && ray.intersectObject(cardMesh, false).length) {
-      if (cardTruncated) openPanelFor(v);
+      if (cardTruncated) openPanel(v.stage());
       else cardOpen = false;
       return;
     }
@@ -672,16 +708,16 @@ function createViewer(cfg, onFirstSettled) {
 
   v.init = function () {
     buildOverlay();
-    loadStage(0);
+    if (!cfg.loadOnSight || v.markerVisible) loadStage(0);
   };
 
   return v;
 }
 
-// ── Nạp sẵn các lớp sâu hơn khi lớp đầu của mọi marker đã xong ──
-var firstCount = 0;
+// ── Nạp sẵn các lớp sâu hơn sau khi các mô hình khởi động đã xong ──
+var initialModelsPending = SCENES.filter(function (cfg) { return !cfg.loadOnSight; }).length;
 function onFirstSettled() {
-  if (++firstCount < SCENES.length) return;
+  if (--initialModelsPending > 0) return;
   var urls = [];
   SCENES.forEach(function (s) {
     s.stages.slice(1).forEach(function (st) { urls.push(st.model); });
@@ -749,6 +785,9 @@ function updateUI() {
   });
 
   uiSet('info', !!cur, function (on) { infoBtn.style.display = on ? 'block' : 'none'; });
+  uiSet('history', !!cur && cur.markerVisible && cur.id === 'tuong-phat-hoang', function (on) {
+    historyTopics.hidden = !on;
+  });
 
   uiSet('calib', CALIB && !!cur && cur.stageIdx < cur.count - 1, function (on) {
     calibNext.style.display = on ? 'block' : 'none';
