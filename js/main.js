@@ -34,14 +34,14 @@ var SCENES = [
         model: 'models/lau_trong.glb',
         title: 'Lầu Trống',
         body:  'Lầu trống có kiến trúc 3 tầng mái,...',
-        dot:   { fx: 0.95, fy: 0.30, fz: 0.95 }   // chóp mái dưới (ước lượng — chỉnh bằng ?calib=1)
+        dot:   { fx: 0.976, fy: 0.554, fz: 0.915 }  // chóp mái tầng 1 ở góc trước bên phải
       },
       {
         id: 'mai_dao',
         model: 'models/mai_dao.glb',
         title: 'Mái Đao',
         body:  'Mái đao là phần mái cong vút ở các góc,...',
-        dot:   { fx: 0.50, fy: 0.55, fz: 0.50 }   // miếng ngói (ước lượng — chỉnh bằng ?calib=1)
+        dot:   { fx: 0.408, fy: 0.303, fz: 0.709 }  // trên mặt viên ngói vảy cá
       },
       {
         id: 'gach_ngoi',
