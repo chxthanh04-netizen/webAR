@@ -57,7 +57,7 @@ var SCENES = [
     stages: [
       {
         id: 'tuong_phat_hoang',
-        model: 'models/tuong_phat_hoang.glb?v=2',
+        model: 'models/tuong_phat_hoang.glb?v=3',
         title: 'Tượng Phật hoàng',
         body: 'Tượng khắc họa Trần Nhân Tông (1258–1308), vị vua thứ ba của nhà Trần và Sơ tổ Thiền phái Trúc Lâm Yên Tử.'
       }
@@ -103,7 +103,7 @@ var HIT_PX       = 52;
 
 // Thẻ thông tin trong AR (hiện khi chạm vào mô hình, nằm phía trên đỉnh mô hình)
 var CARD_OFFSET    = { x: 0, y: 0.02, z: 0 };
-var CARD_W         = 0.9;
+var CARD_W         = 1.0;
 var CARD_H         = CARD_W / 2;
 var CARD_GAP       = 0.1;
 var CARD_MAX_LINES = 4;
@@ -196,11 +196,6 @@ $('start-btn').addEventListener('click', function () {
   started = true;
 });
 
-$('info-btn').addEventListener('click', function () {
-  if (!current) return;
-  if (panelOpen) { setPanel(false); return; }
-  openPanel(current.stage());
-});
 historyTopics.addEventListener('click', function (e) {
   var button = e.target.closest('button[data-topic]');
   var viewer = target();
@@ -243,7 +238,7 @@ function createViewer(cfg, onFirstSettled) {
   var hasDot = false;
 
   var overlayBuilt = false;
-  var cardCanvas, cardCtx, cardTex, cardMat, cardMesh, cardTruncated = false;
+  var cardCanvas, cardCtx, cardTex, cardMat, cardMesh;
   var cardOpen = false, cardT = 0;
   var lineObj, lineGeo, anchor;
   var hot, dotMesh, ringMeshes = [], calibDot = null;
@@ -298,31 +293,28 @@ function createViewer(cfg, onFirstSettled) {
     ctx.fill();
 
     ctx.fillStyle = '#1a1a1a';
-    ctx.font = '700 68px ' + FONT;
-    ctx.fillText(stage.title, PAD, 100);
+    ctx.font = '700 74px ' + FONT;
+    ctx.fillText(stage.title, PAD, 104, W - 2 * PAD);
 
     ctx.fillStyle = '#e6e6e6';
     ctx.fillRect(PAD, 128, W - 2 * PAD, 2);
 
-    ctx.font = '400 32px ' + FONT;
+    ctx.font = '400 44px ' + FONT;
     ctx.fillStyle = '#444';
     var maxW  = W - 2 * PAD;
     var lines = wrapLines(ctx, stage.body, maxW);
-    cardTruncated = lines.length > CARD_MAX_LINES;
-    if (cardTruncated) {
+    if (lines.length > CARD_MAX_LINES) {
       lines = lines.slice(0, CARD_MAX_LINES);
       var last = lines[CARD_MAX_LINES - 1];
       while (last && ctx.measureText(last + '…').width > maxW) last = last.slice(0, -1);
       lines[CARD_MAX_LINES - 1] = last.replace(/[\s,.;:]+$/, '') + '…';
     }
-    lines.forEach(function (l, i) { ctx.fillText(l, PAD, 186 + i * 52); });
+    lines.forEach(function (l, i) { ctx.fillText(l, PAD, 196 + i * 58); });
 
-    if (cardTruncated) {
-      ctx.font = '600 28px ' + FONT;
-      ctx.fillStyle = '#0077b6';
-      ctx.textAlign = 'right';
-      ctx.fillText('Chạm để xem thêm ›', W - PAD, 478);
-    }
+    ctx.font = '600 36px ' + FONT;
+    ctx.fillStyle = '#0077b6';
+    ctx.textAlign = 'right';
+    ctx.fillText('Chạm để đọc ›', W - PAD, 476);
     cardTex.needsUpdate = true;
   }
 
@@ -693,10 +685,9 @@ function createViewer(cfg, onFirstSettled) {
     cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
     ray.setFromCamera(ndc, cam);
 
-    // 2) Thẻ đang mở: chạm thẻ → mở bảng đầy đủ (nếu bị cắt) hoặc đóng thẻ
+    // 2) Thẻ đang mở: chạm thẻ → mở bảng đầy đủ
     if (cardOpen && cardMesh.visible && ray.intersectObject(cardMesh, false).length) {
-      if (cardTruncated) openPanel(v.stage());
-      else cardOpen = false;
+      openPanel(v.stage());
       return;
     }
 
@@ -744,7 +735,6 @@ SCENES.forEach(function (cfg) { viewers.push(createViewer(cfg, onFirstSettled));
 var statusEl = $('marker-status');
 var hintEl   = document.querySelector('#hud .hint');
 var backBtn  = $('back-btn');
-var infoBtn  = $('info-btn');
 var calibNext = $('calib-next');
 var uiCache  = {};
 
@@ -798,7 +788,6 @@ function updateUI() {
     backBtn.textContent   = t;
   });
 
-  uiSet('info', !!cur, function (on) { infoBtn.style.display = on ? 'block' : 'none'; });
   uiSet('history', !!cur && cur.markerVisible && cur.id === 'tuong-phat-hoang', function (on) {
     historyTopics.hidden = !on;
   });

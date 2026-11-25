@@ -34,11 +34,22 @@
 
   <!-- Nút điều khiển -->
   <button id="reset-btn">↺ Reset</button>
-  <button id="info-btn">ℹ️</button>
   <button id="back-btn"></button>
   <div id="history-topics" role="group" aria-label="Lịch sử Phật hoàng Trần Nhân Tông" hidden>
-    <button type="button" data-topic="thienPhai" aria-controls="info-panel">Thiền<br>phái</button>
-    <button type="button" data-topic="vuaTran" aria-controls="info-panel" aria-label="Vua Trần Nhân Tông">Vua<br>Trần</button>
+    <button type="button" data-topic="thienPhai" aria-controls="info-panel"
+            aria-label="Thiền phái Trúc Lâm" title="Thiền phái Trúc Lâm">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M12 20c-3.8 0-8.5-2.1-9.5-8 4-.3 7.1 1.4 9.5 8Zm0 0c3.8 0 8.5-2.1 9.5-8-4-.3-7.1 1.4-9.5 8Z"/>
+        <path d="M8 13.5c.2-3.4 1.6-6.2 4-8.5 2.4 2.3 3.8 5.1 4 8.5"/>
+      </svg>
+    </button>
+    <button type="button" data-topic="vuaTran" aria-controls="info-panel"
+            aria-label="Vua Trần Nhân Tông" title="Vua Trần Nhân Tông">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="7.5" r="3.5"/>
+        <path d="M5 20.5v-1.75a7 5.25 0 0 1 14 0v1.75Z"/>
+      </svg>
+    </button>
   </div>
 
   <!-- Chế độ lấy toạ độ chấm sáng: mở trang với ?calib=1 -->
