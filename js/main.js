@@ -22,7 +22,7 @@ var SCENES = [
         id: 'chanh_dien',
         model: 'models/chanh_dien.glb',
         title: 'Chánh Điện',
-        body:  'Chánh điện được thiết kế theo kiến trúc 8 mái,...'
+        body:  'Chánh điện mang đậm phong cách kiến trúc thuần Việt thời Trần với kết cấu 8 mái lợp ngói đỏ trầm mặc. Hệ thống khung kèo và cột trụ lớn được chế tác từ gỗ lim Nam Phi. Công trình không chỉ hội tụ tinh hoa điêu khắc gỗ truyền thống qua hệ thống bao lam, hoành phi sơn son thếp vàng mà còn là trung tâm sinh hoạt văn hóa, tâm linh lớn nhất vùng Tây Nam Bộ.'
       }
     ]
   },
@@ -33,21 +33,21 @@ var SCENES = [
         id: 'lau_trong',
         model: 'models/lau_trong.glb',
         title: 'Lầu Trống',
-        body:  'Lầu trống có kiến trúc 3 tầng mái,...',
+        body:  'Lầu chuông và Lầu trống được bố trí đăng đối hai bên sân trước Chánh điện, mô phỏng nguyên mẫu tháp chuông cổ của Chùa Keo (Thái Bình) với kết cấu 3 tầng mái cong bằng gỗ lim. Hai hạng mục này tạo nên sự giao thoa độc đáo giữa kiến trúc cổ truyền Bắc Bộ và không gian sông nước phương Nam.',
         dot:   { fx: 0.976, fy: 0.554, fz: 0.915 }  // chóp mái tầng 1 ở góc trước bên phải
       },
       {
         id: 'mai_dao',
         model: 'models/mai_dao.glb',
         title: 'Mái Đao',
-        body:  'Mái đao là phần mái cong vút ở các góc,...',
+        body:  'Định hình từ thời Lý – Trần, kiến trúc mái đao nổi bật với phần góc mái uốn cong vút mềm mại như mũi thuyền rẽ sóng kết hợp cùng hệ thống đắp nổi linh vật truyền thống. Dáng mái cong này mang đậm hơi thở văn minh sông nước, biểu trưng cho tinh thần thanh cao và khát vọng hướng thượng của người Việt.',
         dot:   { fx: 0.408, fy: 0.303, fz: 0.709 }  // trên mặt viên ngói vảy cá
       },
       {
         id: 'gach_ngoi',
         model: 'models/gach_ngoi.glb',
         title: 'Ngói Cánh Sen',
-        body:  'Ngói cánh sen có hình dáng,...'
+        body:  'Kế thừa dòng ngói đất nung truyền thống xuất hiện từ thời Đinh – Tiền Lê và đạt đỉnh cao nghệ thuật vào thời Lý – Trần, ngói cánh sen có bản dẹt với phần mũi được vuốt nhọn, uốn cong nhẹ mô phỏng cánh hoa sen nở. Trong văn hóa Phật giáo, lớp ngói này không chỉ tạo sự đồng bộ cho kiến trúc cổ truyền mà còn gửi gắm triết lý về sự thanh tịnh, thuần khiết và giác ngộ.'
       }
     ]
   },
@@ -59,7 +59,7 @@ var SCENES = [
         id: 'tuong_phat_hoang',
         model: 'models/tuong_phat_hoang.glb?v=3',
         title: 'Tượng Phật hoàng',
-        body: 'Tượng khắc họa Trần Nhân Tông (1258–1308), vị vua thứ ba của nhà Trần và Sơ tổ Thiền phái Trúc Lâm Yên Tử.'
+        body: 'Tôn tượng tại Thiền viện Trúc Lâm Phương Nam được khánh thành năm 2026 bằng công nghệ phục dựng 3D hiện đại. Tác phẩm nhằm tưởng niệm Vua Trần Nhân Tông (1258–1308) – vị anh hùng hai lần đánh thắng giặc Nguyên Mông và sau khi xuất gia năm 1299 đã sáng lập Thiền phái Trúc Lâm Yên Tử thuần Việt.'
       }
     ]
   }
@@ -102,18 +102,14 @@ var HIT_PX       = 52;
 // Thẻ thông tin trong AR (hiện khi chạm vào mô hình, nằm phía trên đỉnh mô hình)
 var CARD_OFFSET    = { x: 0, y: 0.02, z: 0 };
 var CARD_W         = 1.0;
-var CARD_H         = CARD_W / 2;
 var CARD_GAP       = 0.1;
-var CARD_MAX_LINES = 4;
 var CARD_ANIM_MS   = 350;
 var CARD_FONT      = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-var CARD_BUTTONS   = {
-  listen: { x: 48, width: 372 },
-  previous: { x: 654, width: 88 },
-  next: { x: 888, width: 88 }
-};
-var CARD_BUTTON_Y = 424;
-var CARD_BUTTON_H = 64;
+var CARD_PAD       = 48;
+var CARD_BODY_Y    = 190;
+var CARD_LINE_H    = 54;
+var CARD_BUTTON_H  = 84;
+var CARD_LISTEN_W  = 420;
 
 var CALIB = /[?&]calib=1/.test(location.search);
 var D2R   = Math.PI / 180;
@@ -133,6 +129,8 @@ var qTmp = new THREE.Quaternion();
 var vBase = new THREE.Vector3();
 var vUp   = new THREE.Vector3();
 var vEnd  = new THREE.Vector3();
+var cardCenter = new THREE.Vector3();
+var cardCorner = new THREE.Vector3();
 var vHot  = new THREE.Vector3();
 var ray   = new THREE.Raycaster();
 var ndc   = new THREE.Vector2();
@@ -270,7 +268,8 @@ function createViewer(cfg, onFirstSettled) {
   var overlayBuilt = false;
   var cardCanvas, cardCtx, cardTex, cardMat, cardMesh;
   var cardOpen = false, cardT = 0;
-  var cardContent, cardLines, cardPage = 0;
+  var cardContent, cardLines, cardHeight = 0;
+  var cardListenY = 0;
   var cardReading = false, cardStatus = '';
   var lineObj, lineGeo, anchor;
   var hot, dotMesh, ringMeshes = [], calibDot = null;
@@ -313,20 +312,8 @@ function createViewer(cfg, onFirstSettled) {
   });
 
   // ── Vẽ thẻ thông tin ───────────────────────────────────────
-  function drawCardButton(action, label) {
-    var button = CARD_BUTTONS[action];
-    var ctx = cardCtx;
-    ctx.fillStyle = '#873e32';
-    roundRect(ctx, button.x, CARD_BUTTON_Y, button.width, CARD_BUTTON_H, 16);
-    ctx.fill();
-    ctx.fillStyle = '#fff8ec';
-    ctx.font = '600 34px ' + CARD_FONT;
-    ctx.textAlign = 'center';
-    ctx.fillText(label, button.x + button.width / 2, CARD_BUTTON_Y + 44);
-  }
-
   function drawCard() {
-    var W = cardCanvas.width, H = cardCanvas.height, PAD = 48;
+    var W = cardCanvas.width, H = cardCanvas.height, PAD = CARD_PAD;
     var ctx = cardCtx;
 
     ctx.clearRect(0, 0, W, H);
@@ -339,32 +326,30 @@ function createViewer(cfg, onFirstSettled) {
 
     ctx.fillStyle = '#873e32';
     ctx.font = '700 74px ' + CARD_FONT;
-    ctx.fillText(cardContent.title, PAD, 104, W - 2 * PAD);
+    ctx.fillText(cardContent.title, PAD, 104, W - 2 * PAD - CARD_BUTTON_H - 16);
+    ctx.font = '600 56px ' + CARD_FONT;
+    ctx.textAlign = 'center';
+    ctx.fillText('×', W - PAD - CARD_BUTTON_H / 2, 100);
+    ctx.textAlign = 'left';
 
     ctx.fillStyle = '#c49a60';
     ctx.fillRect(PAD, 128, W - 2 * PAD, 2);
 
     ctx.font = '400 44px ' + CARD_FONT;
     ctx.fillStyle = '#3d3026';
-    var first = cardPage * CARD_MAX_LINES;
-    cardLines.slice(first, first + CARD_MAX_LINES).forEach(function (line, i) {
-      ctx.fillText(line, PAD, 190 + i * 54);
+    cardLines.forEach(function (line, i) {
+      ctx.fillText(line, PAD, CARD_BODY_Y + i * CARD_LINE_H);
     });
 
     ctx.font = '400 30px ' + CARD_FONT;
     ctx.fillStyle = '#873e32';
-    if (cardStatus) ctx.fillText(cardStatus, PAD, 401, W - 2 * PAD);
-    drawCardButton('listen', cardReading ? 'Dừng nghe' : 'Nghe thuyết minh');
-
-    var pages = Math.ceil(cardLines.length / CARD_MAX_LINES);
-    if (pages > 1) {
-      if (cardPage > 0) drawCardButton('previous', '‹');
-      if (cardPage + 1 < pages) drawCardButton('next', '›');
-      ctx.font = '600 30px ' + CARD_FONT;
-      ctx.fillStyle = '#614c36';
-      ctx.textAlign = 'center';
-      ctx.fillText((cardPage + 1) + ' / ' + pages, 815, CARD_BUTTON_Y + 42);
-    }
+    if (cardStatus) ctx.fillText(cardStatus, PAD, cardListenY - 14, W - 2 * PAD);
+    roundRect(ctx, PAD, cardListenY, CARD_LISTEN_W, CARD_BUTTON_H, 16);
+    ctx.fill();
+    ctx.font = '600 36px ' + CARD_FONT;
+    ctx.fillStyle = '#fff8ec';
+    ctx.textAlign = 'center';
+    ctx.fillText(cardReading ? 'Dừng nghe' : 'Nghe thuyết minh', PAD + CARD_LISTEN_W / 2, cardListenY + 54);
     cardTex.needsUpdate = true;
   }
 
@@ -373,8 +358,15 @@ function createViewer(cfg, onFirstSettled) {
     stopNarration(v);
     cardContent = content;
     cardCtx.font = '400 44px ' + CARD_FONT;
-    cardLines = wrapLines(cardCtx, content.body, cardCanvas.width - 96);
-    cardPage = 0;
+    cardLines = wrapLines(cardCtx, content.body, cardCanvas.width - 2 * CARD_PAD);
+    cardListenY = CARD_BODY_Y + (cardLines.length - 1) * CARD_LINE_H + 66;
+    var height = cardListenY + CARD_BUTTON_H + 24;
+    if (cardCanvas.height !== height) {
+      cardTex.dispose();
+      cardCanvas.height = height;
+    }
+    cardHeight = CARD_W * height / cardCanvas.width;
+    cardMesh.scale.y = cardHeight;
     cardReading = false;
     cardStatus = '';
     cardOpen = true;
@@ -389,23 +381,16 @@ function createViewer(cfg, onFirstSettled) {
   function handleCardTap(uv) {
     var x = uv.x * cardCanvas.width;
     var y = (1 - uv.y) * cardCanvas.height;
-    if (y < CARD_BUTTON_Y || y > CARD_BUTTON_Y + CARD_BUTTON_H) return;
-    var action = Object.keys(CARD_BUTTONS).find(function (name) {
-      var button = CARD_BUTTONS[name];
-      return x >= button.x && x <= button.x + button.width;
-    });
-    if (action === 'listen') {
+    var closeX = cardCanvas.width - CARD_PAD - CARD_BUTTON_H;
+    if (x >= closeX && x <= closeX + CARD_BUTTON_H && y >= 30 && y <= 30 + CARD_BUTTON_H) {
+      v.closeCard();
+    } else if (x >= CARD_PAD && x <= CARD_PAD + CARD_LISTEN_W &&
+               y >= cardListenY && y <= cardListenY + CARD_BUTTON_H) {
       toggleNarration(v, cardContent, function (reading, status) {
         cardReading = reading;
         cardStatus = status;
         drawCard();
       });
-    } else if (action === 'previous' && cardPage > 0) {
-      cardPage--;
-      drawCard();
-    } else if (action === 'next' && (cardPage + 1) * CARD_MAX_LINES < cardLines.length) {
-      cardPage++;
-      drawCard();
     }
   }
 
@@ -467,12 +452,14 @@ function createViewer(cfg, onFirstSettled) {
     cardCanvas.width = 1024; cardCanvas.height = 512;
     cardCtx = cardCanvas.getContext('2d');
     cardTex = makeTex(cardCanvas);
+    cardTex.generateMipmaps = false;
+    cardTex.minFilter = THREE.LinearFilter;
 
     cardMat = new THREE.MeshBasicMaterial({
       map: cardTex, transparent: true, opacity: 0,
       depthTest: false, depthWrite: false, toneMapped: false
     });
-    cardMesh = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H), cardMat);
+    cardMesh = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, 1), cardMat);
     cardMesh.renderOrder = 1001;
     cardMesh.visible = false;
     cardEl.setObject3D('mesh', cardMesh);
@@ -662,6 +649,35 @@ function createViewer(cfg, onFirstSettled) {
   v.zoomBy = function (f)            { zoom *= f; apply(); };
 
   // ── Mỗi khung hình ─────────────────────────────────────────
+  function fitCardToViewport(obj, cam, progress) {
+    var rect = sceneEl.canvas.getBoundingClientRect();
+    var verticalInset = Math.min(82, window.innerHeight * 0.16);
+    var left = 2 * (Math.max(rect.left, 0) + 12 - rect.left) / rect.width - 1;
+    var right = 2 * (Math.min(rect.right, window.innerWidth) - 12 - rect.left) / rect.width - 1;
+    var top = 1 - 2 * (Math.max(rect.top, verticalInset) - rect.top) / rect.height;
+    var bottom = 1 - 2 * (Math.min(rect.bottom, window.innerHeight - verticalInset) - rect.top) / rect.height;
+    if (!(right > left && top > bottom)) return;
+
+    obj.getWorldPosition(cardCenter).project(cam);
+    obj.localToWorld(cardCorner.set(CARD_W / 2, cardHeight / 2, 0)).project(cam);
+    var halfW = Math.abs(cardCorner.x - cardCenter.x);
+    var halfH = Math.abs(cardCorner.y - cardCenter.y);
+    if (!(halfW > 0 && halfH > 0)) return;
+
+    // Dùng chiều rộng màn hình để chữ vẫn đọc được khi marker ở xa.
+    var readWidth = Math.min((right - left) / 2, 420 / rect.width) * progress;
+    var scale = Math.min(Math.max(1, readWidth / halfW),
+                         (right - left) / (2 * halfW), (top - bottom) / (2 * halfH));
+    obj.scale.multiplyScalar(scale);
+    halfW *= scale;
+    halfH *= scale;
+    cardCenter.x = clamp(cardCenter.x, left + halfW, right - halfW);
+    cardCenter.y = clamp(cardCenter.y, bottom + halfH, top - halfH);
+    cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+    baseEl.object3D.worldToLocal(cardCenter.unproject(cam));
+    obj.position.copy(cardCenter);
+  }
+
   function updateOverlay(dt) {
     if (!overlayBuilt) return;
     if (!modelReady || v.phase === 'loading' || v.phase === 'error' || !v.markerVisible) {
@@ -671,7 +687,7 @@ function createViewer(cfg, onFirstSettled) {
       return;
     }
     var cam = sceneEl.camera;
-    if (!cam) return;
+    if (!cam || !sceneEl.canvas) return;
     cam.getWorldQuaternion(qCam);
 
     var prog = clamp(intro.t / INTRO_MS, 0, 1);
@@ -709,9 +725,10 @@ function createViewer(cfg, onFirstSettled) {
     obj.quaternion.copy(qTmp).invert().multiply(qCam);
     obj.scale.setScalar(s);
     vUp.set(0, 1, 0).applyQuaternion(obj.quaternion);
-    obj.position.copy(vBase).addScaledVector(vUp, (CARD_GAP + CARD_H / 2) * s);
+    obj.position.copy(vBase).addScaledVector(vUp, (CARD_GAP + cardHeight / 2) * s);
+    fitCardToViewport(obj, cam, s);
 
-    vEnd.copy(vBase).addScaledVector(vUp, CARD_GAP * s);
+    vEnd.copy(obj.position).addScaledVector(vUp, -cardHeight * obj.scale.y / 2);
     var pos = lineGeo.attributes.position;
     pos.setXYZ(0, vBase.x, vBase.y, vBase.z);
     pos.setXYZ(1, vEnd.x,  vEnd.y,  vEnd.z);
