@@ -68,13 +68,11 @@ var SCENES = [
 var HISTORY_TOPICS = {
   thienPhai: {
     title: 'Thiền phái Trúc Lâm Yên Tử',
-    body: 'Thiền phái Trúc Lâm hình thành vào thời Trần. Năm 1299, Trần Nhân Tông lên núi Yên Tử tu hành. Ông được tôn là Sơ tổ của thiền phái. Sau ông, Pháp Loa và Huyền Quang tiếp nối, hợp thành Trúc Lâm Tam tổ.\n\nTư tưởng Trúc Lâm gắn việc tu tập với đời sống hằng ngày. Tinh thần ấy được thể hiện trong tác phẩm Cư trần lạc đạo phú của Trần Nhân Tông.',
-    source: 'https://phatgiao.org.vn/luoc-su-truc-lam-tam-to-d47053.html'
+    body: 'Thiền phái Trúc Lâm hình thành vào thời Trần. Năm 1299, Trần Nhân Tông lên núi Yên Tử tu hành. Ông được tôn là Sơ tổ của thiền phái. Sau ông, Pháp Loa và Huyền Quang tiếp nối, hợp thành Trúc Lâm Tam tổ.\n\nTư tưởng Trúc Lâm gắn việc tu tập với đời sống hằng ngày. Tinh thần ấy được thể hiện trong tác phẩm Cư trần lạc đạo phú của Trần Nhân Tông.'
   },
   vuaTran: {
     title: 'Vua Trần Nhân Tông',
-    body: 'Trần Nhân Tông (1258–1308), tên húy Trần Khâm, lên ngôi năm 1278. Dưới thời ông, quân dân Đại Việt đánh bại hai cuộc xâm lược của quân Nguyên vào năm 1285 và giai đoạn 1287–1288.\n\nNăm 1293, ông nhường ngôi cho con là Trần Anh Tông và trở thành Thái thượng hoàng. Về sau, ông xuất gia tu hành tại Yên Tử và được biết đến với danh xưng Phật hoàng.',
-    source: 'https://baotanglichsu.vn/vi/Articles/1508/50847/phat-hoang-tran-nhan-tong-va-nhung-tu-tuong-ven-nguyen-tinh-thoi-su.html'
+    body: 'Trần Nhân Tông (1258–1308), tên húy Trần Khâm, lên ngôi năm 1278. Dưới thời ông, quân dân Đại Việt đánh bại hai cuộc xâm lược của quân Nguyên vào năm 1285 và giai đoạn 1287–1288.\n\nNăm 1293, ông nhường ngôi cho con là Trần Anh Tông và trở thành Thái thượng hoàng. Về sau, ông xuất gia tu hành tại Yên Tử và được biết đến với danh xưng Phật hoàng.'
   }
 };
 
@@ -169,22 +167,75 @@ $('platform-info').textContent =
 
 var panel         = $('info-panel');
 var overlayEl     = $('info-overlay');
-var panelSource   = $('panel-source');
+var panelTitle    = $('panel-title');
+var panelBody     = $('panel-body');
+var listenButton  = $('panel-listen');
+var listenLabel   = $('panel-listen-label');
+var listenStatus  = $('panel-listen-status');
 var historyTopics = $('history-topics');
 var panelOpen     = false;
 var started       = false;
 
+var speech = window.speechSynthesis;
+var canListen = !!(speech && window.SpeechSynthesisUtterance);
+var narration = null;
+listenButton.disabled = !canListen;
+
+function finishNarration(message) {
+  narration = null;
+  listenLabel.textContent = 'Nghe thuyết minh';
+  listenStatus.textContent = message || '';
+}
+
+function stopNarration() {
+  var wasReading = !!narration;
+  finishNarration();
+  if (wasReading) speech.cancel();
+}
+
+listenButton.addEventListener('click', function () {
+  if (!panelOpen || !canListen) return;
+  if (narration) { stopNarration(); return; }
+
+  var voices = speech.getVoices();
+  var voice = voices.find(function (v) { return v.lang.toLowerCase() === 'vi-vn'; }) ||
+              voices.find(function (v) { return /^vi(?:-|$)/i.test(v.lang); });
+  if (voices.length && !voice) {
+    finishNarration('Thiết bị chưa có giọng đọc tiếng Việt.');
+    return;
+  }
+
+  var text = panelTitle.textContent + '. ' + panelBody.textContent.replace(/(\d)–(\d)/g, '$1 đến $2');
+  var utterance = new window.SpeechSynthesisUtterance(text);
+  utterance.lang = 'vi-VN';
+  if (voice) utterance.voice = voice;
+  utterance.onend = function () {
+    if (narration === utterance) finishNarration();
+  };
+  utterance.onerror = function (event) {
+    if (narration !== utterance) return;
+    var unavailable = event.error === 'language-unavailable' || event.error === 'voice-unavailable';
+    finishNarration(unavailable ? 'Thiết bị chưa có giọng đọc tiếng Việt.' : 'Không phát được giọng đọc. Bạn có thể thử lại.');
+  };
+
+  narration = utterance;
+  listenStatus.textContent = '';
+  listenLabel.textContent = 'Dừng nghe';
+  speech.speak(utterance);
+});
+
 function setPanel(open) {
+  if (!open) stopNarration();
   panelOpen = open;
   panel.classList.toggle('open', open);
   overlayEl.style.display = open ? 'block' : 'none';
 }
 
 function openPanel(content) {
-  $('panel-title').textContent = content.title;
-  $('panel-body').textContent  = content.body;
-  panelSource.hidden = !content.source;
-  if (content.source) panelSource.href = content.source;
+  stopNarration();
+  panelTitle.textContent = content.title;
+  panelBody.textContent  = content.body;
+  if (!canListen) listenStatus.textContent = 'Trình duyệt này chưa hỗ trợ đọc thành tiếng.';
   panel.scrollTop = 0;
   setPanel(true);
 }
@@ -314,7 +365,7 @@ function createViewer(cfg, onFirstSettled) {
     ctx.font = '600 36px ' + FONT;
     ctx.fillStyle = '#0077b6';
     ctx.textAlign = 'right';
-    ctx.fillText('Chạm để đọc ›', W - PAD, 476);
+    ctx.fillText(canListen ? 'Đọc hoặc nghe ›' : 'Chạm để đọc ›', W - PAD, 476);
     cardTex.needsUpdate = true;
   }
 

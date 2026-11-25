@@ -152,11 +152,18 @@ body {
   white-space: pre-line;
 }
 
-#panel-source {
-  display: inline-block; margin-top: 12px;
-  color: #852e24; font-size: 16px;
+#panel-listen {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 16px; padding: 8px 16px; min-height: 44px;
+  border: none; border-radius: 50px;
+  background: #852e24; color: #fff;
+  font-family: inherit; font-size: 16px; font-weight: 600; line-height: 1.4;
+  cursor: pointer;
 }
-#panel-source[hidden] { display: none; }
+#panel-listen:focus-visible { outline: 2px solid #852e24; outline-offset: 3px; }
+#panel-listen:disabled { opacity: 0.6; cursor: default; }
+#panel-listen-status { color: #555; font-size: 15px; line-height: 1.5; }
+#panel-listen-status:not(:empty) { margin-top: 8px; }
 
 /* Nút đóng */
 #info-panel .close-panel {
