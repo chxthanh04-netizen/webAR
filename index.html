@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>AR 3D Viewer</title>
+  <title>Trải nghiệm di sản qua AR</title>
 
   <!-- Thư viện AR -->
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
@@ -20,10 +20,9 @@
 
   <!-- Splash -->
   <div id="splash">
-    <h1>📦 AR 3D Viewer</h1>
-    <p>Nhấn nút bên dưới để bắt đầu. Hướng camera vào marker trong sổ tay để xem mô hình 3D.</p>
-    <button id="start-btn">📷 Bắt đầu AR</button>
-    <div class="platform-badge" id="platform-info"></div>
+    <h1>TRẢI NGHIỆM<br>DI SẢN QUA AR</h1>
+    <p>Hướng camera vào marker trong sổ tay để khám phá các mô hình 3D.</p>
+    <button id="start-btn">Bắt đầu AR</button>
   </div>
 
   <!-- HUD -->
@@ -36,14 +35,14 @@
   <button id="reset-btn">↺ Reset</button>
   <button id="back-btn"></button>
   <div id="history-topics" role="group" aria-label="Lịch sử Phật hoàng Trần Nhân Tông" hidden>
-    <button type="button" data-topic="thienPhai" aria-controls="info-panel"
+    <button type="button" data-topic="thienPhai"
             aria-label="Thiền phái Trúc Lâm" title="Thiền phái Trúc Lâm">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M12 20c-3.8 0-8.5-2.1-9.5-8 4-.3 7.1 1.4 9.5 8Zm0 0c3.8 0 8.5-2.1 9.5-8-4-.3-7.1 1.4-9.5 8Z"/>
         <path d="M8 13.5c.2-3.4 1.6-6.2 4-8.5 2.4 2.3 3.8 5.1 4 8.5"/>
       </svg>
     </button>
-    <button type="button" data-topic="vuaTran" aria-controls="info-panel"
+    <button type="button" data-topic="vuaTran"
             aria-label="Vua Trần Nhân Tông" title="Vua Trần Nhân Tông">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="12" cy="7.5" r="3.5"/>
@@ -56,24 +55,11 @@
   <div id="calib-box"></div>
   <button id="calib-next">Lớp tiếp ›</button>
 
-  <!-- Info panel -->
-  <div id="info-overlay"></div>
-  <div id="info-panel">
-    <div class="panel-handle"></div>
-    <button class="close-panel" id="close-panel-btn">✕</button>
-    <h2 id="panel-title"></h2>
-    <hr class="divider">
-    <p id="panel-body"></p>
-    <button type="button" id="panel-listen">
-      <span aria-hidden="true">🔊</span> <span id="panel-listen-label">Nghe thuyết minh</span>
-    </button>
-    <div id="panel-listen-status" role="status"></div>
-  </div>
-
   <!-- AR Scene -->
   <a-scene
       embedded
       vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false"
       loading-screen="enabled: false"
       wait-for-patterns
       renderer="logarithmicDepthBuffer: true; colorManagement: true;"

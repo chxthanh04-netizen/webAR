@@ -106,6 +106,14 @@ var CARD_H         = CARD_W / 2;
 var CARD_GAP       = 0.1;
 var CARD_MAX_LINES = 4;
 var CARD_ANIM_MS   = 350;
+var CARD_FONT      = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+var CARD_BUTTONS   = {
+  listen: { x: 48, width: 372 },
+  previous: { x: 654, width: 88 },
+  next: { x: 888, width: 88 }
+};
+var CARD_BUTTON_Y = 424;
+var CARD_BUTTON_H = 64;
 
 var CALIB = /[?&]calib=1/.test(location.search);
 var D2R   = Math.PI / 180;
@@ -159,85 +167,58 @@ function wrapLines(ctx, text, maxW) {
 }
 
 // ── Giao diện chung ──────────────────────────────────────────
-var ua = navigator.userAgent;
-$('platform-info').textContent =
-    /iPhone|iPad|iPod/.test(ua) ? '🍎 iOS — Dùng Safari'
-  : /Android/.test(ua)          ? '🤖 Android — Dùng Chrome'
-  : '💻 Desktop — Cần webcam';
-
-var panel         = $('info-panel');
-var overlayEl     = $('info-overlay');
-var panelTitle    = $('panel-title');
-var panelBody     = $('panel-body');
-var listenButton  = $('panel-listen');
-var listenLabel   = $('panel-listen-label');
-var listenStatus  = $('panel-listen-status');
 var historyTopics = $('history-topics');
-var panelOpen     = false;
 var started       = false;
 
 var speech = window.speechSynthesis;
 var canListen = !!(speech && window.SpeechSynthesisUtterance);
 var narration = null;
-listenButton.disabled = !canListen;
 
 function finishNarration(message) {
+  var update = narration.update;
   narration = null;
-  listenLabel.textContent = 'Nghe thuyết minh';
-  listenStatus.textContent = message || '';
+  update(false, message || '');
 }
 
-function stopNarration() {
-  var wasReading = !!narration;
+function stopNarration(viewer) {
+  if (!narration || (viewer && narration.viewer !== viewer)) return;
   finishNarration();
-  if (wasReading) speech.cancel();
+  speech.cancel();
 }
 
-listenButton.addEventListener('click', function () {
-  if (!panelOpen || !canListen) return;
-  if (narration) { stopNarration(); return; }
+function toggleNarration(viewer, content, update) {
+  if (narration && narration.viewer === viewer) { stopNarration(viewer); return; }
+  if (!canListen) {
+    update(false, 'Trình duyệt chưa hỗ trợ giọng đọc.');
+    return;
+  }
+  stopNarration();
 
   var voices = speech.getVoices();
   var voice = voices.find(function (v) { return v.lang.toLowerCase() === 'vi-vn'; }) ||
               voices.find(function (v) { return /^vi(?:-|$)/i.test(v.lang); });
   if (voices.length && !voice) {
-    finishNarration('Thiết bị chưa có giọng đọc tiếng Việt.');
+    update(false, 'Thiết bị chưa có giọng đọc tiếng Việt.');
     return;
   }
 
-  var text = panelTitle.textContent + '. ' + panelBody.textContent.replace(/(\d)–(\d)/g, '$1 đến $2');
+  var text = content.title + '. ' + content.body.replace(/(\d)–(\d)/g, '$1 đến $2');
   var utterance = new window.SpeechSynthesisUtterance(text);
   utterance.lang = 'vi-VN';
   if (voice) utterance.voice = voice;
+  var reading = { viewer: viewer, utterance: utterance, update: update };
   utterance.onend = function () {
-    if (narration === utterance) finishNarration();
+    if (narration === reading) finishNarration();
   };
   utterance.onerror = function (event) {
-    if (narration !== utterance) return;
+    if (narration !== reading) return;
     var unavailable = event.error === 'language-unavailable' || event.error === 'voice-unavailable';
-    finishNarration(unavailable ? 'Thiết bị chưa có giọng đọc tiếng Việt.' : 'Không phát được giọng đọc. Bạn có thể thử lại.');
+    finishNarration(unavailable ? 'Thiết bị chưa có giọng đọc tiếng Việt.' : 'Không phát được. Chạm để thử lại.');
   };
 
-  narration = utterance;
-  listenStatus.textContent = '';
-  listenLabel.textContent = 'Dừng nghe';
+  narration = reading;
+  update(true, '');
   speech.speak(utterance);
-});
-
-function setPanel(open) {
-  if (!open) stopNarration();
-  panelOpen = open;
-  panel.classList.toggle('open', open);
-  overlayEl.style.display = open ? 'block' : 'none';
-}
-
-function openPanel(content) {
-  stopNarration();
-  panelTitle.textContent = content.title;
-  panelBody.textContent  = content.body;
-  if (!canListen) listenStatus.textContent = 'Trình duyệt này chưa hỗ trợ đọc thành tiếng.';
-  panel.scrollTop = 0;
-  setPanel(true);
 }
 
 $('start-btn').addEventListener('click', function () {
@@ -250,10 +231,8 @@ $('start-btn').addEventListener('click', function () {
 historyTopics.addEventListener('click', function (e) {
   var button = e.target.closest('button[data-topic]');
   var viewer = target();
-  if (button && viewer && viewer.id === 'tuong-phat-hoang') openPanel(HISTORY_TOPICS[button.dataset.topic]);
+  if (button && viewer && viewer.id === 'tuong-phat-hoang') viewer.showCard(HISTORY_TOPICS[button.dataset.topic]);
 });
-$('close-panel-btn').addEventListener('click', function () { setPanel(false); });
-overlayEl.addEventListener('click', function () { setPanel(false); });
 
 $('reset-btn').addEventListener('click', function () { if (current) current.reset(); });
 $('back-btn').addEventListener('click',  function () { if (current) current.goTo(current.stageIdx - 1); });
@@ -291,6 +270,8 @@ function createViewer(cfg, onFirstSettled) {
   var overlayBuilt = false;
   var cardCanvas, cardCtx, cardTex, cardMat, cardMesh;
   var cardOpen = false, cardT = 0;
+  var cardContent, cardLines, cardPage = 0;
+  var cardReading = false, cardStatus = '';
   var lineObj, lineGeo, anchor;
   var hot, dotMesh, ringMeshes = [], calibDot = null;
 
@@ -313,6 +294,7 @@ function createViewer(cfg, onFirstSettled) {
 
   markerEl.addEventListener('markerFound', function () {
     v.markerVisible = true;
+    if (current && current !== v) current.closeCard();
     current = v;
     if (v.phase === 'waiting') {
       if (overlayBuilt) loadStage(0);
@@ -322,6 +304,7 @@ function createViewer(cfg, onFirstSettled) {
   });
   markerEl.addEventListener('markerLost', function () {
     v.markerVisible = false;
+    v.closeCard();
     v.lostAt = Date.now();
     if (current === v) {
       var other = viewers.filter(function (x) { return x.markerVisible; })[0];
@@ -330,43 +313,100 @@ function createViewer(cfg, onFirstSettled) {
   });
 
   // ── Vẽ thẻ thông tin ───────────────────────────────────────
-  function drawCard(stage) {
-    var W = 1024, H = 512, PAD = 48;
-    var FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  function drawCardButton(action, label) {
+    var button = CARD_BUTTONS[action];
+    var ctx = cardCtx;
+    ctx.fillStyle = '#873e32';
+    roundRect(ctx, button.x, CARD_BUTTON_Y, button.width, CARD_BUTTON_H, 16);
+    ctx.fill();
+    ctx.fillStyle = '#fff8ec';
+    ctx.font = '600 34px ' + CARD_FONT;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, button.x + button.width / 2, CARD_BUTTON_Y + 44);
+  }
+
+  function drawCard() {
+    var W = cardCanvas.width, H = cardCanvas.height, PAD = 48;
     var ctx = cardCtx;
 
     ctx.clearRect(0, 0, W, H);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
 
-    ctx.fillStyle = 'rgba(255,255,255,0.97)';
+    ctx.fillStyle = '#fff8ec';
     roundRect(ctx, 0, 0, W, H, 44);
     ctx.fill();
 
-    ctx.fillStyle = '#1a1a1a';
-    ctx.font = '700 74px ' + FONT;
-    ctx.fillText(stage.title, PAD, 104, W - 2 * PAD);
+    ctx.fillStyle = '#873e32';
+    ctx.font = '700 74px ' + CARD_FONT;
+    ctx.fillText(cardContent.title, PAD, 104, W - 2 * PAD);
 
-    ctx.fillStyle = '#e6e6e6';
+    ctx.fillStyle = '#c49a60';
     ctx.fillRect(PAD, 128, W - 2 * PAD, 2);
 
-    ctx.font = '400 44px ' + FONT;
-    ctx.fillStyle = '#444';
-    var maxW  = W - 2 * PAD;
-    var lines = wrapLines(ctx, stage.body, maxW);
-    if (lines.length > CARD_MAX_LINES) {
-      lines = lines.slice(0, CARD_MAX_LINES);
-      var last = lines[CARD_MAX_LINES - 1];
-      while (last && ctx.measureText(last + '…').width > maxW) last = last.slice(0, -1);
-      lines[CARD_MAX_LINES - 1] = last.replace(/[\s,.;:]+$/, '') + '…';
-    }
-    lines.forEach(function (l, i) { ctx.fillText(l, PAD, 196 + i * 58); });
+    ctx.font = '400 44px ' + CARD_FONT;
+    ctx.fillStyle = '#3d3026';
+    var first = cardPage * CARD_MAX_LINES;
+    cardLines.slice(first, first + CARD_MAX_LINES).forEach(function (line, i) {
+      ctx.fillText(line, PAD, 190 + i * 54);
+    });
 
-    ctx.font = '600 36px ' + FONT;
-    ctx.fillStyle = '#0077b6';
-    ctx.textAlign = 'right';
-    ctx.fillText(canListen ? 'Đọc hoặc nghe ›' : 'Chạm để đọc ›', W - PAD, 476);
+    ctx.font = '400 30px ' + CARD_FONT;
+    ctx.fillStyle = '#873e32';
+    if (cardStatus) ctx.fillText(cardStatus, PAD, 401, W - 2 * PAD);
+    drawCardButton('listen', cardReading ? 'Dừng nghe' : 'Nghe thuyết minh');
+
+    var pages = Math.ceil(cardLines.length / CARD_MAX_LINES);
+    if (pages > 1) {
+      if (cardPage > 0) drawCardButton('previous', '‹');
+      if (cardPage + 1 < pages) drawCardButton('next', '›');
+      ctx.font = '600 30px ' + CARD_FONT;
+      ctx.fillStyle = '#614c36';
+      ctx.textAlign = 'center';
+      ctx.fillText((cardPage + 1) + ' / ' + pages, 815, CARD_BUTTON_Y + 42);
+    }
     cardTex.needsUpdate = true;
+  }
+
+  v.showCard = function (content) {
+    if (!overlayBuilt || !modelReady || !v.markerVisible || v.phase === 'outro') return;
+    stopNarration(v);
+    cardContent = content;
+    cardCtx.font = '400 44px ' + CARD_FONT;
+    cardLines = wrapLines(cardCtx, content.body, cardCanvas.width - 96);
+    cardPage = 0;
+    cardReading = false;
+    cardStatus = '';
+    cardOpen = true;
+    drawCard();
+  };
+
+  v.closeCard = function () {
+    cardOpen = false;
+    stopNarration(v);
+  };
+
+  function handleCardTap(uv) {
+    var x = uv.x * cardCanvas.width;
+    var y = (1 - uv.y) * cardCanvas.height;
+    if (y < CARD_BUTTON_Y || y > CARD_BUTTON_Y + CARD_BUTTON_H) return;
+    var action = Object.keys(CARD_BUTTONS).find(function (name) {
+      var button = CARD_BUTTONS[name];
+      return x >= button.x && x <= button.x + button.width;
+    });
+    if (action === 'listen') {
+      toggleNarration(v, cardContent, function (reading, status) {
+        cardReading = reading;
+        cardStatus = status;
+        drawCard();
+      });
+    } else if (action === 'previous' && cardPage > 0) {
+      cardPage--;
+      drawCard();
+    } else if (action === 'next' && (cardPage + 1) * CARD_MAX_LINES < cardLines.length) {
+      cardPage++;
+      drawCard();
+    }
   }
 
   // ── Chấm sáng ──────────────────────────────────────────────
@@ -553,7 +593,7 @@ function createViewer(cfg, onFirstSettled) {
     hasPlayed = true;
     v.phase   = 'intro';
     intro.t   = 0;
-    cardOpen  = false;
+    v.closeCard();
     cardT     = 0;
     apply();
   }
@@ -565,7 +605,8 @@ function createViewer(cfg, onFirstSettled) {
     v.error    = '';
     modelReady = false;
     yaw = 0; pitch = 0; zoom = 1;
-    cardOpen = false; cardT = 0;
+    v.closeCard();
+    cardT = 0;
     if (overlayBuilt) {
       hot.visible = false;
       cardMesh.visible = false;
@@ -589,7 +630,6 @@ function createViewer(cfg, onFirstSettled) {
     v.phase   = 'intro';
     hasPlayed = v.markerVisible;
 
-    drawCard(v.stage());
     placeOverlay();
     apply();
     settleFirst();
@@ -608,7 +648,7 @@ function createViewer(cfg, onFirstSettled) {
     if (v.phase === 'error') { loadStage(idx); return; }
     if (!modelReady || (v.phase !== 'idle' && v.phase !== 'intro')) return;
     pendingIdx = idx;
-    cardOpen   = false;
+    v.closeCard();
     v.phase    = 'outro';
   };
 
@@ -717,13 +757,23 @@ function createViewer(cfg, onFirstSettled) {
 
   // ── Chạm ───────────────────────────────────────────────────
   v.handleTap = function (x, y) {
-    if (panelOpen || !v.markerVisible || v.phase !== 'idle' || !overlayBuilt) return;
+    if (!v.markerVisible || v.phase !== 'idle' || !overlayBuilt) return;
     var cam = sceneEl.camera;
     var cv  = sceneEl.canvas;
     if (!cam || !cv) return;
     var r = cv.getBoundingClientRect();
 
-    // 1) Chạm chấm sáng → sang lớp kế tiếp
+    ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+    cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+    ray.setFromCamera(ndc, cam);
+
+    // Thẻ hiển thị trên cùng nên nhận thao tác trước chấm sáng và mô hình.
+    if (cardOpen && cardMesh.visible) {
+      var cardHit = ray.intersectObject(cardMesh, false)[0];
+      if (cardHit) { handleCardTap(cardHit.uv); return; }
+    }
+
+    // Chạm chấm sáng → sang lớp kế tiếp
     if (hot.visible) {
       hot.getWorldPosition(vHot);
       vHot.project(cam);
@@ -732,27 +782,17 @@ function createViewer(cfg, onFirstSettled) {
       if (Math.hypot(x - sx, y - sy) <= HIT_PX) { v.goTo(v.stageIdx + 1); return; }
     }
 
-    ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
-    cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
-    ray.setFromCamera(ndc, cam);
-
-    // 2) Thẻ đang mở: chạm thẻ → mở bảng đầy đủ
-    if (cardOpen && cardMesh.visible && ray.intersectObject(cardMesh, false).length) {
-      openPanel(v.stage());
-      return;
-    }
-
-    // 3) Chạm vào mô hình → bật/tắt thẻ thông tin (hoặc lấy toạ độ nếu đang calib)
+    // Chạm vào mô hình → bật/tắt thẻ thông tin (hoặc lấy toạ độ nếu đang calib)
     var model = modelEl.getObject3D('mesh');
     var hits  = model ? ray.intersectObject(model, true) : [];
     if (hits.length) {
       if (CALIB) calibReport(hits[0].point);
-      else cardOpen = !cardOpen;
+      else if (cardOpen && cardContent === v.stage()) v.closeCard();
+      else v.showCard(v.stage());
       return;
     }
 
-    // 4) Chạm ra ngoài → đóng thẻ
-    if (cardOpen) cardOpen = false;
+    v.closeCard();
   };
 
   v.init = function () {
@@ -839,7 +879,7 @@ function updateUI() {
     backBtn.textContent   = t;
   });
 
-  uiSet('history', !!cur && cur.markerVisible && cur.id === 'tuong-phat-hoang', function (on) {
+  uiSet('history', !!cur && cur.markerVisible && cur.phase === 'idle' && cur.id === 'tuong-phat-hoang', function (on) {
     historyTopics.hidden = !on;
   });
 
@@ -868,7 +908,7 @@ var lastTapAt    = 0;
 function recentTouch() { return Date.now() - lastTouchAt < 1000; }
 
 function ignoreEvent(e) {
-  return panelOpen || (e.target && e.target.closest && e.target.closest('button'));
+  return e.target && e.target.closest && e.target.closest('button');
 }
 
 function dragStart(x, y, noTap) {
@@ -931,7 +971,6 @@ document.addEventListener('touchstart', function (e) {
 
 document.addEventListener('touchmove', function (e) {
   lastTouchAt = Date.now();
-  if (panelOpen) return;
   if (e.touches.length === 2) {
     var d = pinchDist(e.touches);
     var t = target();
@@ -945,7 +984,7 @@ document.addEventListener('touchmove', function (e) {
 document.addEventListener('touchend', function (e) {
   lastTouchAt = Date.now();
   lastPinch   = null;
-  if (e.touches.length === 1 && !panelOpen) {
+  if (e.touches.length === 1) {
     dragStart(e.touches[0].clientX, e.touches[0].clientY, true);
   } else if (e.touches.length === 0) {
     dragEnd();
@@ -970,7 +1009,6 @@ document.addEventListener('mousemove', function (e) { if (!recentTouch()) dragMo
 document.addEventListener('mouseup',   function ()  { if (!recentTouch()) dragEnd(); });
 
 document.addEventListener('wheel', function (e) {
-  if (panelOpen) return;
   var t = target();
   if (t) t.zoomBy(Math.exp(-e.deltaY * 0.001));
 }, { passive: true });
