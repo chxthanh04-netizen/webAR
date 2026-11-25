@@ -103,7 +103,7 @@ var HIT_PX       = 52;
 var CARD_OFFSET    = { x: 0, y: 0.02, z: 0 };
 var CARD_W         = 1.0;
 var CARD_GAP       = 0.1;
-var CARD_ANIM_MS   = 350;
+var CARD_ANIM_MS   = 140;
 var CARD_FONT      = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 var CARD_PAD       = 48;
 var CARD_BODY_Y    = 190;
@@ -131,9 +131,30 @@ var vUp   = new THREE.Vector3();
 var vEnd  = new THREE.Vector3();
 var cardCenter = new THREE.Vector3();
 var cardCorner = new THREE.Vector3();
+var cardProjection = new THREE.Matrix4();
 var vHot  = new THREE.Vector3();
 var ray   = new THREE.Raycaster();
 var ndc   = new THREE.Vector2();
+var cardViewport;
+
+function updateCardViewport() {
+  if (!sceneEl.canvas) return;
+  var rect = sceneEl.canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  var topInset = Math.min(56, window.innerHeight * 0.12);
+  var bottomInset = Math.min(82, window.innerHeight * 0.16);
+  cardViewport = {
+    left: 2 * (Math.max(rect.left, 0) + 12 - rect.left) / rect.width - 1,
+    right: 2 * (Math.min(rect.right, window.innerWidth) - 12 - rect.left) / rect.width - 1,
+    top: 1 - 2 * (Math.max(rect.top, topInset) - rect.top) / rect.height,
+    bottom: 1 - 2 * (Math.min(rect.bottom, window.innerHeight - bottomInset) - rect.top) / rect.height,
+    minWidth: 2 * Math.min(175, window.innerWidth * 0.55) / rect.width,
+    readWidth: 2 * Math.min(280, window.innerWidth * 0.82) / rect.width,
+    gap: 16 / rect.height
+  };
+}
+
+window.addEventListener('resize', function () { requestAnimationFrame(updateCardViewport); });
 
 function makeTex(c) {
   var t = new THREE.CanvasTexture(c);
@@ -269,8 +290,10 @@ function createViewer(cfg, onFirstSettled) {
   var cardCanvas, cardCtx, cardTex, cardMat, cardMesh;
   var cardOpen = false, cardT = 0;
   var cardContent, cardLines, cardHeight = 0;
-  var cardListenY = 0;
+  var cardListenY = 0, cardPixelHeight = 0;
   var cardReading = false, cardStatus = '';
+  var modelCorners = [];
+  var cardBelowModel = false;
   var lineObj, lineGeo, anchor;
   var hot, dotMesh, ringMeshes = [], calibDot = null;
 
@@ -313,7 +336,7 @@ function createViewer(cfg, onFirstSettled) {
 
   // ── Vẽ thẻ thông tin ───────────────────────────────────────
   function drawCard() {
-    var W = cardCanvas.width, H = cardCanvas.height, PAD = CARD_PAD;
+    var W = cardCanvas.width, H = cardPixelHeight, PAD = CARD_PAD;
     var ctx = cardCtx;
 
     ctx.clearRect(0, 0, W, H);
@@ -353,34 +376,44 @@ function createViewer(cfg, onFirstSettled) {
     cardTex.needsUpdate = true;
   }
 
-  v.showCard = function (content) {
-    if (!overlayBuilt || !modelReady || !v.markerVisible || v.phase === 'outro') return;
-    stopNarration(v);
+  function prepareCard(content) {
+    if (cardContent === content && !cardStatus) return;
     cardContent = content;
     cardCtx.font = '400 44px ' + CARD_FONT;
     cardLines = wrapLines(cardCtx, content.body, cardCanvas.width - 2 * CARD_PAD);
     cardListenY = CARD_BODY_Y + (cardLines.length - 1) * CARD_LINE_H + 66;
-    var height = cardListenY + CARD_BUTTON_H + 24;
-    if (cardCanvas.height !== height) {
+    cardPixelHeight = cardListenY + CARD_BUTTON_H + 24;
+    if (cardCanvas.height < cardPixelHeight) {
       cardTex.dispose();
-      cardCanvas.height = height;
+      cardCanvas.height = THREE.MathUtils.ceilPowerOfTwo(cardPixelHeight);
     }
-    cardHeight = CARD_W * height / cardCanvas.width;
+    cardTex.repeat.y = cardPixelHeight / cardCanvas.height;
+    cardTex.offset.y = 1 - cardTex.repeat.y;
+    cardHeight = CARD_W * cardPixelHeight / cardCanvas.width;
     cardMesh.scale.y = cardHeight;
     cardReading = false;
     cardStatus = '';
-    cardOpen = true;
     drawCard();
+  }
+
+  v.showCard = function (content) {
+    if (!overlayBuilt || !modelReady || !v.markerVisible || v.phase === 'outro') return;
+    stopNarration(v);
+    prepareCard(content);
+    updateCardViewport();
+    if (!cardOpen) cardBelowModel = false;
+    cardOpen = true;
   };
 
   v.closeCard = function () {
     cardOpen = false;
+    v.cardNeedsSpace = false;
     stopNarration(v);
   };
 
   function handleCardTap(uv) {
     var x = uv.x * cardCanvas.width;
-    var y = (1 - uv.y) * cardCanvas.height;
+    var y = (1 - uv.y) * cardPixelHeight;
     var closeX = cardCanvas.width - CARD_PAD - CARD_BUTTON_H;
     if (x >= closeX && x <= closeX + CARD_BUTTON_H && y >= 30 && y <= 30 + CARD_BUTTON_H) {
       v.closeCard();
@@ -449,7 +482,7 @@ function createViewer(cfg, onFirstSettled) {
 
   function buildOverlay() {
     cardCanvas = document.createElement('canvas');
-    cardCanvas.width = 1024; cardCanvas.height = 512;
+    cardCanvas.width = 1024; cardCanvas.height = 1024;
     cardCtx = cardCanvas.getContext('2d');
     cardTex = makeTex(cardCanvas);
     cardTex.generateMipmaps = false;
@@ -608,6 +641,12 @@ function createViewer(cfg, onFirstSettled) {
     halfH    = e.detail.halfHeight;
     topPoint = e.detail.top;
     box      = e.detail.box;
+    modelCorners = [];
+    [box.min.x, box.max.x].forEach(function (x) {
+      [box.min.y, box.max.y].forEach(function (y) {
+        modelCorners.push(new THREE.Vector3(x, y, box.min.z), new THREE.Vector3(x, y, box.max.z));
+      });
+    });
 
     clipOn = false;           // vật liệu của model mới chưa có clip plane
     collectMaterials();
@@ -618,6 +657,8 @@ function createViewer(cfg, onFirstSettled) {
     hasPlayed = v.markerVisible;
 
     placeOverlay();
+    prepareCard(v.stage());
+    sceneEl.renderer.initTexture(cardTex);
     apply();
     settleFirst();
   });
@@ -649,33 +690,44 @@ function createViewer(cfg, onFirstSettled) {
   v.zoomBy = function (f)            { zoom *= f; apply(); };
 
   // ── Mỗi khung hình ─────────────────────────────────────────
-  function fitCardToViewport(obj, cam, progress) {
-    var rect = sceneEl.canvas.getBoundingClientRect();
-    var verticalInset = Math.min(82, window.innerHeight * 0.16);
-    var left = 2 * (Math.max(rect.left, 0) + 12 - rect.left) / rect.width - 1;
-    var right = 2 * (Math.min(rect.right, window.innerWidth) - 12 - rect.left) / rect.width - 1;
-    var top = 1 - 2 * (Math.max(rect.top, verticalInset) - rect.top) / rect.height;
-    var bottom = 1 - 2 * (Math.min(rect.bottom, window.innerHeight - verticalInset) - rect.top) / rect.height;
-    if (!(right > left && top > bottom)) return;
-
+  function placeCardBesideModel(obj, cam) {
+    var view = cardViewport;
+    if (!view || view.right <= view.left) return false;
+    obj.position.copy(vBase).addScaledVector(vUp, CARD_GAP);
+    obj.scale.setScalar(1);
     obj.getWorldPosition(cardCenter).project(cam);
-    obj.localToWorld(cardCorner.set(CARD_W / 2, cardHeight / 2, 0)).project(cam);
+    obj.localToWorld(cardCorner.set(CARD_W / 2, cardHeight, 0)).project(cam);
     var halfW = Math.abs(cardCorner.x - cardCenter.x);
-    var halfH = Math.abs(cardCorner.y - cardCenter.y);
-    if (!(halfW > 0 && halfH > 0)) return;
+    var height = cardCorner.y - cardCenter.y;
+    if (!(halfW > 0 && height > 0)) return false;
 
-    // Dùng chiều rộng màn hình để chữ vẫn đọc được khi marker ở xa.
-    var readWidth = Math.min((right - left) / 2, 420 / rect.width) * progress;
-    var scale = Math.min(Math.max(1, readWidth / halfW),
-                         (right - left) / (2 * halfW), (top - bottom) / (2 * halfH));
-    obj.scale.multiplyScalar(scale);
+    // Đặt thẻ ngoài hình chiếu của mô hình, ưu tiên vị trí phía trên.
+    cardProjection.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse).multiply(pivot.object3D.matrixWorld);
+    var modelTop = -Infinity, modelBottom = Infinity;
+    for (var i = 0; i < modelCorners.length; i++) {
+      cardCorner.copy(modelCorners[i]).applyMatrix4(cardProjection);
+      modelTop = Math.max(modelTop, cardCorner.y);
+      modelBottom = Math.min(modelBottom, cardCorner.y);
+    }
+    var aboveEdge = Math.max(cardCenter.y, modelTop + view.gap, view.bottom);
+    var belowEdge = Math.min(modelBottom - view.gap, view.top);
+    var aboveSpace = (view.top - aboveEdge) / height;
+    var belowSpace = (belowEdge - view.bottom) / height;
+    var minScale = view.minWidth / (2 * halfW);
+    cardBelowModel = belowSpace >= minScale && (cardBelowModel || aboveSpace < minScale);
+    var scale = Math.min(Math.max(1, view.readWidth / (2 * halfW)),
+                         (view.right - view.left) / (2 * halfW), cardBelowModel ? belowSpace : aboveSpace);
+    if (scale < minScale) return false;
+
+    obj.scale.setScalar(scale);
     halfW *= scale;
-    halfH *= scale;
-    cardCenter.x = clamp(cardCenter.x, left + halfW, right - halfW);
-    cardCenter.y = clamp(cardCenter.y, bottom + halfH, top - halfH);
+    cardCenter.x = clamp(cardCenter.x, view.left + halfW, view.right - halfW);
+    cardCenter.y = cardBelowModel ? belowEdge : aboveEdge;
     cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
     baseEl.object3D.worldToLocal(cardCenter.unproject(cam));
-    obj.position.copy(cardCenter);
+    vEnd.copy(cardCenter);
+    obj.position.copy(vEnd).addScaledVector(vUp, cardHeight * scale * (cardBelowModel ? -0.5 : 0.5));
+    return true;
   }
 
   function updateOverlay(dt) {
@@ -713,9 +765,10 @@ function createViewer(cfg, onFirstSettled) {
     // Thẻ thông tin (bật/tắt khi chạm vào mô hình)
     cardT = clamp(cardT + (cardOpen ? dt : -dt) / CARD_ANIM_MS, 0, 1);
     var s = easeOut(cardT);
-    cardMat.opacity  = s;
-    cardMesh.visible = s > 0.01;
-    if (!cardMesh.visible) { lineObj.visible = false; return; }
+    if (s <= 0.01) {
+      cardMesh.visible = lineObj.visible = false;
+      return;
+    }
 
     anchor.getWorldPosition(vBase);
     baseEl.object3D.worldToLocal(vBase);
@@ -723,17 +776,16 @@ function createViewer(cfg, onFirstSettled) {
 
     var obj = cardEl.object3D;
     obj.quaternion.copy(qTmp).invert().multiply(qCam);
-    obj.scale.setScalar(s);
     vUp.set(0, 1, 0).applyQuaternion(obj.quaternion);
-    obj.position.copy(vBase).addScaledVector(vUp, (CARD_GAP + cardHeight / 2) * s);
-    fitCardToViewport(obj, cam, s);
-
-    vEnd.copy(obj.position).addScaledVector(vUp, -cardHeight * obj.scale.y / 2);
+    cardMesh.visible = placeCardBesideModel(obj, cam);
+    v.cardNeedsSpace = cardOpen && !cardMesh.visible;
+    lineObj.visible = cardMesh.visible && !cardBelowModel && s > 0.3;
+    if (!cardMesh.visible) return;
+    cardMat.opacity = s;
     var pos = lineGeo.attributes.position;
     pos.setXYZ(0, vBase.x, vBase.y, vBase.z);
     pos.setXYZ(1, vEnd.x,  vEnd.y,  vEnd.z);
     pos.needsUpdate = true;
-    lineObj.visible = s > 0.3;
   }
 
   v.onFrame = function (dt, showContent) {
@@ -884,6 +936,7 @@ function updateUI() {
   var hint;
   if (!cur || !cur.markerVisible) hint = '📌 Hướng camera vào marker trong sổ tay';
   else if (CALIB)                 hint = '🎯 CALIB: chạm lên mô hình để lấy toạ độ chấm sáng';
+  else if (cur.cardNeedsSpace)     hint = 'Lùi camera hoặc đưa marker xuống thấp để chừa chỗ cho thẻ.';
   else if (cur.stageIdx < cur.count - 1)
     hint = '👆 Chạm vào mô hình để xem thông tin · chạm chấm sáng để xem chi tiết hơn';
   else
