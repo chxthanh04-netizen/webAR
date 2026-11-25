@@ -1,6 +1,6 @@
 /* ── Reset ───────────────────────────────────────────────────── */
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { touch-action: none; }
+a-scene, a-scene canvas { touch-action: none; }
 body {
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -99,6 +99,49 @@ body {
 }
 #history-topics button:active { background: #652219; }
 #history-topics button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* ── Thẻ thông tin ──────────────────────────────────────────── */
+#info-card {
+  --info-top-inset: max(78px, env(safe-area-inset-top));
+  --info-bottom-inset: max(88px, env(safe-area-inset-bottom));
+  position: fixed;
+  top: var(--info-top-inset);
+  left: 50%; transform: translateX(-50%);
+  bottom: auto;
+  z-index: 9999;
+  width: min(380px, calc(100% - 24px));
+  max-height: min(var(--info-max-height, 100%), calc(100% - var(--info-top-inset) - var(--info-bottom-inset)));
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  border: 1px solid #c49a60;
+  border-radius: 14px;
+  background: #fff8ec;
+  color: #3d3026;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  padding: 12px 16px 8px;
+}
+#info-card[data-placement="below"] {
+  top: auto;
+  bottom: var(--info-bottom-inset);
+}
+#info-card header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  border-bottom: 1px solid #c49a60;
+  color: #873e32;
+}
+#info-title { font-size: 19px; line-height: 1.2; }
+#info-close {
+  flex: 0 0 36px; height: 36px;
+  border: 0; background: transparent; color: inherit;
+  font-size: 27px; line-height: 1; cursor: pointer;
+}
+#info-body { margin: 10px 0 12px; font-size: 14px; line-height: 1.45; white-space: pre-line; }
+#info-listen {
+  min-height: 38px; padding: 6px 12px; border: 0; border-radius: 6px;
+  background: #873e32; color: #fff8ec; font-weight: 600; cursor: pointer;
+}
+#info-status { min-height: 20px; padding-top: 4px; color: #873e32; font-size: 12px; }
 
 /* ── Chế độ calib (?calib=1) ─────────────────────────────────── */
 #calib-box {

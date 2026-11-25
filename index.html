@@ -14,7 +14,7 @@
   <script src="js/ar-components.js?v=stable-card"></script>
 
   <!-- CSS -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=fixed-card">
 </head>
 <body>
 
@@ -51,6 +51,16 @@
     </button>
   </div>
 
+  <section id="info-card" aria-labelledby="info-title" hidden>
+    <header>
+      <h2 id="info-title"></h2>
+      <button id="info-close" type="button" aria-label="Đóng thông tin">×</button>
+    </header>
+    <p id="info-body"></p>
+    <button id="info-listen" type="button">Nghe thuyết minh</button>
+    <p id="info-status" role="status"></p>
+  </section>
+
   <!-- Chế độ lấy toạ độ chấm sáng: mở trang với ?calib=1 -->
   <div id="calib-box"></div>
   <button id="calib-next">Lớp tiếp ›</button>
@@ -81,7 +91,6 @@
         <a-entity id="chanh-dien-pivot">
           <a-entity id="chanh-dien-model" auto-fit="size: 1"></a-entity>
         </a-entity>
-        <a-entity id="chanh-dien-card"></a-entity>
       </a-entity>
     </a-marker>
 
@@ -95,7 +104,6 @@
         <a-entity id="lau-trong-pivot">
           <a-entity id="lau-trong-model" auto-fit="size: 1"></a-entity>
         </a-entity>
-        <a-entity id="lau-trong-card"></a-entity>
       </a-entity>
     </a-marker>
 
@@ -108,7 +116,6 @@
         <a-entity id="tuong-phat-hoang-pivot">
           <a-entity id="tuong-phat-hoang-model" auto-fit="size: 1"></a-entity>
         </a-entity>
-        <a-entity id="tuong-phat-hoang-card"></a-entity>
       </a-entity>
     </a-marker>
 
@@ -119,6 +126,6 @@
   </a-scene>
 
   <!-- Logic -->
-  <script src="js/main.js?v=steady-card"></script>
+  <script src="js/main.js?v=fixed-card"></script>
 </body>
 </html>
