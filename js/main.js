@@ -101,7 +101,7 @@ var HIT_PX       = 52;
 
 // Thẻ thông tin trong AR (hiện khi chạm vào mô hình, nằm phía trên đỉnh mô hình)
 var CARD_OFFSET    = { x: 0, y: 0.02, z: 0 };
-var CARD_W         = 1.0;
+var CARD_W         = 0.9;
 var CARD_GAP       = 0.1;
 var CARD_ANIM_MS   = 140;
 var CARD_FONT      = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -149,7 +149,6 @@ function updateCardViewport() {
     top: 1 - 2 * (Math.max(rect.top, topInset) - rect.top) / rect.height,
     bottom: 1 - 2 * (Math.min(rect.bottom, window.innerHeight - bottomInset) - rect.top) / rect.height,
     minWidth: 2 * Math.min(175, window.innerWidth * 0.55) / rect.width,
-    readWidth: 2 * Math.min(280, window.innerWidth * 0.82) / rect.width,
     gap: 16 / rect.height
   };
 }
@@ -713,9 +712,9 @@ function createViewer(cfg, onFirstSettled) {
     var belowEdge = Math.min(modelBottom - view.gap, view.top);
     var aboveSpace = (view.top - aboveEdge) / height;
     var belowSpace = (belowEdge - view.bottom) / height;
-    var minScale = view.minWidth / (2 * halfW);
+    var minScale = Math.min(1, view.minWidth / (2 * halfW));
     cardBelowModel = belowSpace >= minScale && (cardBelowModel || aboveSpace < minScale);
-    var scale = Math.min(Math.max(1, view.readWidth / (2 * halfW)),
+    var scale = Math.min(1,
                          (view.right - view.left) / (2 * halfW), cardBelowModel ? belowSpace : aboveSpace);
     if (scale < minScale) return false;
 
