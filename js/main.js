@@ -101,6 +101,9 @@ var HIT_PX       = 52;
 var CARD_W         = 0.9;
 var CARD_GAP_PX    = 18;
 var CARD_ANIM_MS   = 140;
+var CARD_SMOOTH_MS = 150;
+var CARD_LOST_MS   = 300;
+var CARD_BUFFER_PX = 12;
 var CARD_FONT      = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 var CARD_PAD       = 48;
 var CARD_BODY_Y    = 190;
@@ -140,14 +143,19 @@ function updateCardViewport() {
   if (!rect.width || !rect.height) return;
   var topInset = Math.min(56, window.innerHeight * 0.12);
   var bottomInset = Math.min(82, window.innerHeight * 0.16);
-  cardViewport = {
+  var view = {
     left: 2 * (Math.max(rect.left, 0) + 12 - rect.left) / rect.width - 1,
     right: 2 * (Math.min(rect.right, window.innerWidth) - 12 - rect.left) / rect.width - 1,
     top: 1 - 2 * (Math.max(rect.top, topInset) - rect.top) / rect.height,
     bottom: 1 - 2 * (Math.min(rect.bottom, window.innerHeight - bottomInset) - rect.top) / rect.height,
     minWidth: 2 * Math.min(175, window.innerWidth * 0.55) / rect.width,
-    gap: 2 * CARD_GAP_PX / rect.height
+    gap: 2 * CARD_GAP_PX / rect.height,
+    pxX: 2 / rect.width,
+    pxY: 2 / rect.height
   };
+  if (!cardViewport || Object.keys(view).some(function (key) { return cardViewport[key] !== view[key]; })) {
+    cardViewport = view;
+  }
 }
 
 window.addEventListener('resize', function () { requestAnimationFrame(updateCardViewport); });
@@ -289,6 +297,8 @@ function createViewer(cfg, onFirstSettled) {
   var cardListenY = 0, cardPixelHeight = 0;
   var cardReading = false, cardStatus = '';
   var cardBelowModel = false;
+  var cardPose = new THREE.Vector3();
+  var cardPoseViewport = null;
   var lineObj, lineGeo;
   var hot, dotMesh, ringMeshes = [], calibDot = null;
 
@@ -321,7 +331,6 @@ function createViewer(cfg, onFirstSettled) {
   });
   markerEl.addEventListener('markerLost', function () {
     v.markerVisible = false;
-    v.closeCard();
     v.lostAt = Date.now();
     if (current === v) {
       var other = viewers.filter(function (x) { return x.markerVisible; })[0];
@@ -394,6 +403,7 @@ function createViewer(cfg, onFirstSettled) {
   v.showCard = function (content) {
     if (!overlayBuilt || !modelReady || !v.markerVisible || v.phase === 'outro') return;
     stopNarration(v);
+    if (!cardOpen || cardContent !== content) cardPoseViewport = null;
     prepareCard(content);
     updateCardViewport();
     if (!cardOpen) cardBelowModel = false;
@@ -672,7 +682,7 @@ function createViewer(cfg, onFirstSettled) {
   v.zoomBy = function (f)            { zoom *= f; apply(); };
 
   // ── Mỗi khung hình ─────────────────────────────────────────
-  function placeCardBesideModel(obj, cam) {
+  function placeCardBesideModel(obj, cam, dt) {
     var view = cardViewport;
     if (!view || view.right <= view.left) return false;
     // Neo theo marker và mức zoom, độc lập với góc xoay của pivot.
@@ -698,18 +708,48 @@ function createViewer(cfg, onFirstSettled) {
     var modelBottom = (y * depth - tangent) * projectedScale - projection[9];
     var aboveEdge = Math.max(modelTop + view.gap, view.bottom);
     var belowEdge = Math.min(modelBottom - view.gap, view.top);
-    var aboveSpace = (view.top - aboveEdge) / height;
-    var belowSpace = (belowEdge - view.bottom) / height;
+    var widthLimit = Math.min(1, (view.right - view.left) / (2 * halfW));
+    var aboveScale = Math.min(widthLimit, (view.top - aboveEdge) / height);
+    var belowScale = Math.min(widthLimit, (belowEdge - view.bottom) / height);
     var minScale = Math.min(1, view.minWidth / (2 * halfW));
-    cardBelowModel = belowSpace >= minScale && (cardBelowModel || aboveSpace < minScale);
-    var scale = Math.min(1,
-                         (view.right - view.left) / (2 * halfW), cardBelowModel ? belowSpace : aboveSpace);
-    if (scale < minScale) return false;
+    var available = cardBelowModel ? belowScale : aboveScale;
 
+    // Giữ phía đang đọc khi khoảng trống dao động nhẹ quanh ngưỡng vừa khít.
+    if (available < minScale * (cardMesh.visible ? 0.88 : 1)) {
+      var other = cardBelowModel ? aboveScale : belowScale;
+      if (other < minScale) return false;
+      cardBelowModel = !cardBelowModel;
+      cardPoseViewport = null;
+      available = other;
+    }
+
+    var buffer = CARD_BUFFER_PX * view.pxY;
+    var low = cardBelowModel ? view.bottom : aboveEdge;
+    var high = cardBelowModel ? belowEdge : view.top;
+    var targetScale = Math.min(available, Math.max(minScale, (high - low - buffer) / height));
+    var targetW = halfW * targetScale;
+    var targetH = height * targetScale / 2;
+    var extraGap = Math.min(buffer, Math.max(0, high - low - 2 * targetH));
+    var targetX = clamp(cardCenter.x, view.left + targetW, view.right - targetW);
+    var targetY = cardBelowModel ? high - targetH - extraGap : low + targetH + extraGap;
+
+    if (cardPoseViewport !== view) {
+      cardPose.set(targetX, targetY, targetW);
+      cardPoseViewport = view;
+    } else {
+      // Làm mượt trong toạ độ màn hình để triệt dao động từ marker cha.
+      var blend = 1 - Math.exp(-dt / CARD_SMOOTH_MS);
+      if (Math.abs(cardPose.x - targetX) > view.pxX * 2) cardPose.x += (targetX - cardPose.x) * blend;
+      if (Math.abs(cardPose.y - targetY) > view.pxY * 2) cardPose.y += (targetY - cardPose.y) * blend;
+      if (Math.abs(cardPose.z - targetW) > view.pxX) cardPose.z += (targetW - cardPose.z) * blend;
+    }
+
+    var visibleW = Math.min(cardPose.z, halfW * available);
+    var scale = visibleW / halfW;
+    var visibleH = height * scale / 2;
     obj.scale.setScalar(scale);
-    halfW *= scale;
-    cardCenter.x = clamp(cardCenter.x, view.left + halfW, view.right - halfW);
-    cardCenter.y = cardBelowModel ? belowEdge : aboveEdge;
+    cardCenter.x = clamp(cardPose.x, view.left + visibleW, view.right - visibleW);
+    cardCenter.y = clamp(cardPose.y, low + visibleH, high - visibleH) + (cardBelowModel ? visibleH : -visibleH);
     cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
     baseEl.object3D.worldToLocal(vEnd.copy(cardCenter).unproject(cam));
     cardCenter.y = modelTop;
@@ -721,6 +761,7 @@ function createViewer(cfg, onFirstSettled) {
   function updateOverlay(dt) {
     if (!overlayBuilt) return;
     if (!modelReady || v.phase === 'loading' || v.phase === 'error' || !v.markerVisible) {
+      if (cardOpen && !v.markerVisible && Date.now() - v.lostAt > CARD_LOST_MS) v.closeCard();
       hot.visible = false;
       cardMesh.visible = false;
       lineObj.visible  = false;
@@ -763,7 +804,7 @@ function createViewer(cfg, onFirstSettled) {
     var obj = cardEl.object3D;
     obj.quaternion.copy(qTmp).invert().multiply(qCam);
     vUp.set(0, 1, 0).applyQuaternion(obj.quaternion);
-    cardMesh.visible = placeCardBesideModel(obj, cam);
+    cardMesh.visible = placeCardBesideModel(obj, cam, dt);
     v.cardNeedsSpace = cardOpen && !cardMesh.visible;
     lineObj.visible = cardMesh.visible && !cardBelowModel && s > 0.3;
     if (!cardMesh.visible) return;
