@@ -14,7 +14,6 @@
 //            Muốn lấy số chính xác: mở trang với ?calib=1 rồi chạm lên mô hình.
 //   cardAt : (tuỳ chọn) vị trí gắn thẻ thông tin, cùng dạng với dot.
 //            Bỏ trống = đỉnh cao nhất của mô hình (như ở Chánh Điện).
-//   metalness : (tuỳ chọn) độ kim loại dùng khi hiển thị trong cảnh AR.
 var SCENES = [
   {
     id: 'chanh-dien',
@@ -58,9 +57,7 @@ var SCENES = [
     stages: [
       {
         id: 'tuong_phat_hoang',
-        model: 'models/tuong_phat_hoang.glb',
-        // Dùng màu bake dưới ánh sáng tán xạ vì cảnh AR không có bản đồ môi trường.
-        metalness: 0,
+        model: 'models/tuong_phat_hoang.glb?v=2',
         title: 'Tượng Phật hoàng',
         body: 'Tượng khắc họa Trần Nhân Tông (1258–1308), vị vua thứ ba của nhà Trần và Sơ tổ Thiền phái Trúc Lâm Yên Tử.'
       }
@@ -261,6 +258,13 @@ function createViewer(cfg, onFirstSettled) {
   }
 
   // ── Marker ─────────────────────────────────────────────────
+  v.isTracked = function () {
+    // AR.js 3.4.5 giữ anchor hiển thị thêm một lúc sau khi tracker mất marker.
+    var component = markerEl.components['arjs-anchor'];
+    var anchor = component && component._arAnchor;
+    return !!anchor && anchor.controls.object3d.visible;
+  };
+
   markerEl.addEventListener('markerFound', function () {
     v.markerVisible = true;
     current = v;
@@ -438,7 +442,7 @@ function createViewer(cfg, onFirstSettled) {
   }
 
   // ── Vật liệu, clip, độ mờ ──────────────────────────────────
-  function collectMaterials(stage) {
+  function collectMaterials() {
     var mesh = modelEl.getObject3D('mesh');
     mats = [];
     if (!mesh) return;
@@ -446,9 +450,6 @@ function createViewer(cfg, onFirstSettled) {
       if (!o.isMesh) return;
       (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) {
         if (!m || mats.some(function (e) { return e.m === m; })) return;
-        if (stage.metalness !== undefined && m.isMeshStandardMaterial) {
-          m.metalness = stage.metalness;
-        }
         mats.push({ m: m, transparent: m.transparent, opacity: m.opacity });
       });
     });
@@ -538,15 +539,14 @@ function createViewer(cfg, onFirstSettled) {
     box      = e.detail.box;
 
     clipOn = false;           // vật liệu của model mới chưa có clip plane
-    var stage = v.stage();
-    collectMaterials(stage);
+    collectMaterials();
     modelReady = true;
 
     intro.t   = 0;
     v.phase   = 'intro';
     hasPlayed = v.markerVisible;
 
-    drawCard(stage);
+    drawCard(v.stage());
     placeOverlay();
     apply();
     settleFirst();
@@ -636,7 +636,8 @@ function createViewer(cfg, onFirstSettled) {
     lineObj.visible = s > 0.3;
   }
 
-  v.onFrame = function (dt) {
+  v.onFrame = function (dt, showContent) {
+    baseEl.object3D.visible = showContent;
     if (v.phase === 'outro') {
       intro.t -= dt * (INTRO_MS / OUTRO_MS);
       if (intro.t <= 0) {
@@ -809,7 +810,11 @@ function updateUI() {
 
 window.onFrame = function (dt) {
   dt = Math.min(dt, 50);
-  viewers.forEach(function (v) { v.onFrame(dt); });
+  var tracked = viewers.filter(function (v) { return v.isTracked(); });
+  viewers.forEach(function (v) {
+    // Giữ độ trễ khi mất dấu, nhưng ẩn mẫu cũ khi camera đã nhận ra marker khác.
+    v.onFrame(dt, tracked.length === 0 || tracked.includes(v));
+  });
   updateUI();
 };
 

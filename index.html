@@ -73,9 +73,9 @@
 
     <!-- Marker 1: Chánh Điện (1 lớp) -->
     <a-marker type="pattern" url="marker/pattern_chanh_dien.patt"
-              emitevents="true"
-              smooth="true" smoothCount="10"
-              smoothTolerance="0.01" smoothThreshold="5"
+              min-confidence="0.9"
+              smooth="true" smooth-count="10"
+              smooth-tolerance="0.01" smooth-threshold="5"
               id="marker-chanh-dien">
       <a-entity id="chanh-dien-base">
         <a-entity id="chanh-dien-pivot">
@@ -87,6 +87,7 @@
 
     <!-- Marker 2: Lầu Trống → Mái Đao → Ngói (3 lớp, model được nạp bằng main.js) -->
     <a-marker type="pattern" url="marker/pattern_lau.patt"
+              min-confidence="0.9"
               smooth="true" smooth-count="10"
               smooth-tolerance="0.01" smooth-threshold="5"
               id="marker-lau-trong">
