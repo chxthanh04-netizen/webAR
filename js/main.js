@@ -14,6 +14,7 @@
 //            Muốn lấy số chính xác: mở trang với ?calib=1 rồi chạm lên mô hình.
 //   cardAt : (tuỳ chọn) vị trí gắn thẻ thông tin, cùng dạng với dot.
 //            Bỏ trống = đỉnh cao nhất của mô hình (như ở Chánh Điện).
+//   metalness : (tuỳ chọn) độ kim loại dùng khi hiển thị trong cảnh AR.
 var SCENES = [
   {
     id: 'chanh-dien',
@@ -58,6 +59,8 @@ var SCENES = [
       {
         id: 'tuong_phat_hoang',
         model: 'models/tuong_phat_hoang.glb',
+        // Dùng màu bake dưới ánh sáng tán xạ vì cảnh AR không có bản đồ môi trường.
+        metalness: 0,
         title: 'Tượng Phật hoàng',
         body: 'Tượng khắc họa Trần Nhân Tông (1258–1308), vị vua thứ ba của nhà Trần và Sơ tổ Thiền phái Trúc Lâm Yên Tử.'
       }
@@ -435,16 +438,18 @@ function createViewer(cfg, onFirstSettled) {
   }
 
   // ── Vật liệu, clip, độ mờ ──────────────────────────────────
-  function collectMaterials() {
+  function collectMaterials(stage) {
     var mesh = modelEl.getObject3D('mesh');
     mats = [];
     if (!mesh) return;
     mesh.traverse(function (o) {
       if (!o.isMesh) return;
       (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) {
-        if (!m) return;
-        if (mats.every(function (e) { return e.m !== m; }))
-          mats.push({ m: m, transparent: m.transparent, opacity: m.opacity });
+        if (!m || mats.some(function (e) { return e.m === m; })) return;
+        if (stage.metalness !== undefined && m.isMeshStandardMaterial) {
+          m.metalness = stage.metalness;
+        }
+        mats.push({ m: m, transparent: m.transparent, opacity: m.opacity });
       });
     });
   }
@@ -533,14 +538,15 @@ function createViewer(cfg, onFirstSettled) {
     box      = e.detail.box;
 
     clipOn = false;           // vật liệu của model mới chưa có clip plane
-    collectMaterials();
+    var stage = v.stage();
+    collectMaterials(stage);
     modelReady = true;
 
     intro.t   = 0;
     v.phase   = 'intro';
     hasPlayed = v.markerVisible;
 
-    drawCard(v.stage());
+    drawCard(stage);
     placeOverlay();
     apply();
     settleFirst();

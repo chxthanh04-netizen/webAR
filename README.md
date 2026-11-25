@@ -30,7 +30,10 @@ npx http-server -p 8080
 
 1. Mở trang `qr.html` trên máy tính → nhập URL đã deploy → tạo QR
 2. Quét QR bằng điện thoại
-3. Nhấn "Bắt đầu AR" → hướng camera vào marker Hiro
+3. Nhấn "Bắt đầu AR" rồi hướng camera vào marker tương ứng trong sổ tay. Có thể mở các ảnh mẫu sau để quét:
+   - [Chánh Điện](marker/pattern_chanh_dien.png)
+   - [Lầu Trống](marker/pattern_lau.png)
+   - [Tượng Phật hoàng](marker/pattern_tuong.png)
 
 ## 📁 Cấu trúc
 
