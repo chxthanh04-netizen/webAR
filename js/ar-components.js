@@ -112,12 +112,14 @@ AFRAME.registerComponent('auto-fit', {
     // Điểm cao nhất của mô hình (đỉnh mái): trung bình các đỉnh nằm sát độ cao max
     var v = new THREE.Vector3();
     var best = -Infinity;
+    var radiusSq = 0;
     meshes.forEach(function (e) {
       var pos = e.geo.attributes.position;
       if (!pos) return;
       for (var i = 0; i < pos.count; i++) {
         v.fromBufferAttribute(pos, i).applyMatrix4(e.m);
         if (v.y > best) best = v.y;
+        radiusSq = Math.max(radiusSq, v.distanceToSquared(center));
       }
     });
     var eps = size.y * 0.01, sx = 0, sz = 0, n = 0;
@@ -139,6 +141,7 @@ AFRAME.registerComponent('auto-fit', {
       detail: {
         el:         el,
         halfHeight: size.y * s / 2,
+        radius:     Math.sqrt(radiusSq) * s,
         top:        toPivot(sx / n, best, sz / n),
         box:        { min: toPivot(box.min.x, box.min.y, box.min.z),
                       max: toPivot(box.max.x, box.max.y, box.max.z) }
